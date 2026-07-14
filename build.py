@@ -6,5 +6,6 @@ js = ''.join(open(f).read()+'\n' for f in
 out = (head
   + '\n<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>\n'
   + '<script>\n' + js + '</script>\n</body>\n</html>\n')
-open('立體模擬城市.html','w').write(out)
-print('OK ->', '立體模擬城市.html', len(out), 'bytes')
+for fn in ['立體模擬城市.html', 'index.html']:   # index.html 供 GitHub Pages
+    open(fn,'w').write(out)
+    print('OK ->', fn, len(out), 'bytes')
