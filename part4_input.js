@@ -77,9 +77,11 @@ function initInput(){
       return;
     }
     if(pinchStart(e)) return;
+    if(e.button===1) e.preventDefault();   // 中鍵:抑制瀏覽器自動捲動
     ptr.down=true; ptr.id=e.pointerId; ptr.moved=false;
     ptr.sx=ptr.lx=e.clientX; ptr.sy=ptr.ly=e.clientY;
-    ptr.mode = (e.button===2||e.ctrlKey) ? 'rotate' : (curTool==='query'?'pan':'paint');
+    ptr.mode = (e.button===2||e.ctrlKey) ? 'rotate'
+             : (e.button===1||curTool==='query') ? 'pan' : 'paint';
     cv.setPointerCapture(e.pointerId);
     if(ptr.mode==='paint') paintAt(e.clientX,e.clientY);
   });
@@ -106,8 +108,8 @@ function initInput(){
       const s=bird.dist*0.0016;
       const fx=Math.cos(bird.yaw), fz=Math.sin(bird.yaw);
       const rx=-fz, rz=fx;
-      bird.tx += (rx*dx + fx*dy)*s;
-      bird.tz += (rz*dx + fz*dy)*s;
+      bird.tx += (rx*dx - fx*dy)*s;
+      bird.tz += (rz*dx - fz*dy)*s;
       updateBirdCam();
     } else if(ptr.mode==='rotate'){
       bird.yaw   += dx*0.0055;
