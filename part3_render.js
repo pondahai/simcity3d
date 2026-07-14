@@ -390,12 +390,22 @@ function drawBig(c,x,y){
   }
 }
 
-/* ── 車流 ── */
-let cars=[], roadList=[];
+/* ── 車流與火車 ── */
+let cars=[], roadList=[], trains=[], railList=[];
 function refreshCars(){
-  roadList=[];
-  for(let x=0;x<N;x++)for(let y=0;y<N;y++) if(G[x][y].t===T.ROAD) roadList.push([x,y]);
-  const want = Math.min(CAR_CAP, Math.floor(roadList.length/2.4));
+  roadList=[]; railList=[];
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const t=G[x][y].t;
+    if(t===T.ROAD) roadList.push([x,y]);
+    else if(t===T.RAIL) railList.push([x,y]);
+  }
+  const wantTrain = Math.min(10, Math.floor(railList.length/7));
+  while(trains.length>wantTrain) trains.pop();
+  while(trains.length<wantTrain && railList.length){
+    const [x,y]=railList[Math.floor(Math.random()*railList.length)];
+    trains.push({x,y,tx:x,ty:y,prog:1});
+  }
+  const want = Math.min(CAR_CAP - trains.length*2, Math.floor(roadList.length/2.4));
   while(cars.length>want) cars.pop();
   while(cars.length<want && roadList.length){
     const [x,y]=roadList[Math.floor(Math.random()*roadList.length)];
@@ -427,6 +437,38 @@ function stepCars(dt){
     _d.rotation.set(0, dx!==0 ? 0 : Math.PI/2, 0);
     _d.scale.set(1,1,1); _d.updateMatrix();
     carMesh.setMatrixAt(n,_d.matrix); wCol(carMesh,n,car.col); n++;
+  }
+  // 火車:沿鐵路行駛,不走回頭路,端點折返
+  for(const tr of trains){
+    tr.prog += dt*2.2;
+    if(tr.prog>=1){
+      const px=tr.x, py=tr.y;
+      tr.x=tr.tx; tr.y=tr.ty; tr.prog=0;
+      const opts=[];
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const nx=tr.x+dx, ny=tr.y+dy;
+        if(inB(nx,ny)&&G[nx][ny].t===T.RAIL&&!(nx===px&&ny===py)) opts.push([nx,ny]);
+      }
+      if(!opts.length){
+        if(inB(px,py)&&G[px][py].t===T.RAIL&&!(px===tr.x&&py===tr.y)) opts.push([px,py]);
+        else { tr.prog=1; continue; }   // 鐵路被拆或孤立,原地待命
+      }
+      const pick=opts[Math.floor(Math.random()*opts.length)];
+      tr.tx=pick[0]; tr.ty=pick[1];
+    }
+    const fx=wx(tr.x)+(wx(tr.tx)-wx(tr.x))*tr.prog;
+    const fz=wz(tr.y)+(wz(tr.ty)-wz(tr.y))*tr.prog;
+    const dx=tr.tx-tr.x, dz=tr.ty-tr.y;
+    const ry = dx!==0 ? 0 : Math.PI/2;
+    const bx = dx ? -Math.sign(dx)*2.1 : 0, bz = dz ? -Math.sign(dz)*2.1 : 0;
+    if(n<CAR_CAP){ // 車頭
+      _d.position.set(fx,0.52,fz); _d.rotation.set(0,ry,0); _d.scale.set(1.5,1.15,1.05); _d.updateMatrix();
+      carMesh.setMatrixAt(n,_d.matrix); wCol(carMesh,n,0x37424e); n++;
+    }
+    if(n<CAR_CAP){ // 車廂
+      _d.position.set(fx+bx,0.5,fz+bz); _d.rotation.set(0,ry,0); _d.scale.set(1.3,1.0,1.0); _d.updateMatrix();
+      carMesh.setMatrixAt(n,_d.matrix); wCol(carMesh,n,0x8a5a3a); n++;
+    }
   }
   flushInst(carMesh, n);
 }

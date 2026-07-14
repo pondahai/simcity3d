@@ -288,7 +288,9 @@ function computeStats(){
     if(isZone(c.t)&&c.lvl>0) radial(tra,x,y,4,c.lvl*7);
   }
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
-    if(G[x][y].t!==T.ROAD&&G[x][y].t!==T.RAIL) tra[idx(x,y)]*=0.25;
+    const t=G[x][y].t, i=idx(x,y);
+    if(t===T.RAIL) tra[i]*=0.3;        // 鐵路運量大,壅塞僅為道路的 30%
+    else if(t!==T.ROAD) tra[i]*=0.25;
   }
 
   // 污染源
@@ -299,7 +301,7 @@ function computeStats(){
     if(c.t===T.AIRPORT) pol[i]+=28;
     if(c.t===T.FIRE) pol[i]+=45;
     if(c.t===T.RUBBLE) pol[i]+=8;
-    pol[i]+=tra[i]*0.22;
+    if(c.t!==T.RAIL) pol[i]+=tra[i]*0.22;   // 鐵路視為電氣化,不產生交通污染
   }
   blur(pol,3);
 
@@ -440,6 +442,21 @@ function simMonth(){
   }
   if(burning.length) dirty=true;
 
+  // 交通撥款不足:道路/鐵路逐月劣化
+  if(city.fundRoad<1){
+    const p=(1-city.fundRoad)*0.012;
+    let decayed=0;
+    for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+      const c=G[x][y];
+      if((c.t===T.ROAD||c.t===T.RAIL) && Math.random()<p){
+        c.t = c.br?T.WATER:T.RUBBLE;
+        c.br=false; c.wr=false; c.lvl=0; c.ax=-1; c.ay=-1;
+        decayed++;
+      }
+    }
+    if(decayed){ computePower(); toast('🛣 交通撥款不足,部分道路/鐵路年久失修損毀!'); }
+  }
+
   // 財政(逐月)
   const income = (resSum*1.0 + comSum*1.6 + indSum*1.6) * city.tax * 0.32;
   let roads=0, rails=0, police=0, fire=0;
@@ -523,7 +540,7 @@ function triggerDisaster(kind, auto){
     let n=Math.min(45,cand.length);
     while(n-->0){
       const [x,y]=cand[Math.floor(Math.random()*cand.length)];
-      const c=G[x][y]; c.t=T.RUBBLE; c.wr=false; c.lvl=0; c.ax=-1; c.ay=-1;
+      const c=G[x][y]; c.t=c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.lvl=0; c.ax=-1; c.ay=-1;
     }
     toast('🌊 洪水氾濫!沿岸地區受災。');
   }
@@ -538,7 +555,7 @@ function triggerDisaster(kind, auto){
       const [x,y]=randTile(); const c=G[x][y];
       if(c.t===T.WATER||c.t===T.GRASS) continue;
       if(Math.random()<0.25 && flammable(c.t)) igniteCell(x,y);
-      else { if(isBigB(c.t)){c.ax=-1;c.ay=-1;} c.t=T.RUBBLE; c.wr=false; c.lvl=0; }
+      else { if(isBigB(c.t)){c.ax=-1;c.ay=-1;} c.t=c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.lvl=0; }
     }
     quake=1.4;
     toast('🫨 大地震!全市受創。');
