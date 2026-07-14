@@ -1,0 +1,1781 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>立體模擬城市 SimCity 3D</title>
+<style>
+:root{
+  --panel:#141c26; --panel2:#1c2735; --line:#2c3b4f;
+  --ink:#dce7f2; --dim:#7f93a8; --amber:#ffb742; --amber2:#ffd489;
+  --res:#4cc36b; --com:#4d9de0; --ind:#e8c14a; --bad:#e05d5d;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#0d131b;
+  font-family:"PingFang TC","Microsoft JhengHei","Noto Sans TC",system-ui,sans-serif;
+  color:var(--ink);user-select:none;-webkit-user-select:none}
+#c3d{position:fixed;inset:0;display:block;touch-action:none}
+button{font-family:inherit;color:inherit;background:none;border:none;cursor:pointer}
+
+/* ── 頂部市政列 ── */
+#topbar{position:fixed;top:0;left:0;right:0;height:52px;display:flex;align-items:stretch;gap:1px;
+  background:linear-gradient(#18222f,#121a25);border-bottom:1px solid var(--line);z-index:20;
+  padding:0 6px;overflow-x:auto;scrollbar-width:none}
+#topbar::-webkit-scrollbar{display:none}
+.tb-cell{display:flex;flex-direction:column;justify-content:center;padding:4px 12px;min-width:74px;
+  border-right:1px solid var(--line)}
+.tb-cell .lab{font-size:10px;color:var(--dim);letter-spacing:2px}
+.tb-cell .val{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--amber2);white-space:nowrap}
+#cityname .val{color:var(--ink)}
+/* RCI 需求柱 */
+#rci{display:flex;align-items:center;gap:7px;padding:6px 12px;border-right:1px solid var(--line)}
+.rcicol{display:flex;flex-direction:column;align-items:center;gap:2px}
+.rcitrack{width:12px;height:30px;background:#0b1119;border:1px solid var(--line);position:relative;border-radius:2px;overflow:hidden}
+.rcibar{position:absolute;left:0;width:100%;height:0;bottom:50%}
+.rcizero{position:absolute;left:0;right:0;top:50%;height:1px;background:var(--dim);opacity:.6}
+.rcicol span{font-size:10px;font-weight:700}
+#barR{background:var(--res)} #barC{background:var(--com)} #barI{background:var(--ind)}
+.rcicol:nth-child(1) span{color:var(--res)}.rcicol:nth-child(2) span{color:var(--com)}.rcicol:nth-child(3) span{color:var(--ind)}
+/* 速度與功能按鈕 */
+.tb-btns{display:flex;align-items:center;gap:4px;padding:0 8px;border-right:1px solid var(--line)}
+.sbtn{width:34px;height:34px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);
+  font-size:14px;color:var(--dim);display:flex;align-items:center;justify-content:center}
+.sbtn.on{background:var(--amber);color:#1a1408;border-color:var(--amber);font-weight:700}
+.mbtn{height:34px;padding:0 12px;border-radius:6px;background:var(--panel2);border:1px solid var(--line);
+  font-size:13px;white-space:nowrap}
+.mbtn:active{background:#26374c}
+#viewBtn{background:#24506f;border-color:#3a7db0;color:#cfe8ff;font-weight:700}
+
+/* ── 左側工具列(鳥瞰限定) ── */
+#toolbar{position:fixed;left:6px;top:60px;bottom:44px;width:96px;z-index:15;
+  display:flex;flex-direction:column;gap:4px;overflow-y:auto;scrollbar-width:none;padding-bottom:6px}
+#toolbar::-webkit-scrollbar{display:none}
+.tool{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 4px 5px;
+  display:flex;flex-direction:column;align-items:center;gap:1px;flex:none}
+.tool .ic{font-size:19px;line-height:1.15}
+.tool .nm{font-size:11px;letter-spacing:1px}
+.tool .pr{font-size:10px;color:var(--dim);font-variant-numeric:tabular-nums}
+.tool.sel{background:#3a2f14;border-color:var(--amber);box-shadow:0 0 0 1px var(--amber)}
+.tool.sel .pr{color:var(--amber2)}
+.toolgroup{font-size:10px;color:var(--dim);letter-spacing:3px;text-align:center;margin-top:4px;flex:none}
+
+/* ── 底部訊息帶 ── */
+#ticker{position:fixed;left:0;right:0;bottom:0;height:34px;background:linear-gradient(#101822,#0c121a);
+  border-top:1px solid var(--line);display:flex;align-items:center;padding:0 14px;z-index:20;gap:10px}
+#tickerDot{width:8px;height:8px;border-radius:50%;background:var(--amber);flex:none;animation:blink 2s infinite}
+@keyframes blink{50%{opacity:.25}}
+#tickerText{font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ── 街景模式提示與虛擬搖桿 ── */
+#walkHint{position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:15;
+  background:rgba(12,18,26,.82);border:1px solid var(--line);border-radius:8px;
+  padding:7px 14px;font-size:12px;color:var(--dim);display:none;text-align:center}
+#stick{position:fixed;left:26px;bottom:64px;width:118px;height:118px;border-radius:50%;
+  background:rgba(20,28,38,.5);border:1px solid var(--line);z-index:15;display:none;touch-action:none}
+#stickKnob{position:absolute;left:50%;top:50%;width:48px;height:48px;border-radius:50%;
+  background:rgba(255,183,66,.85);transform:translate(-50%,-50%)}
+
+/* ── 覆蓋圖例 ── */
+#legend{position:fixed;right:8px;top:60px;z-index:15;background:rgba(12,18,26,.85);
+  border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:12px;display:none}
+#legend b{color:var(--amber2)}
+
+/* ── 鳥瞰視角鈕 ── */
+#camBtns{position:fixed;right:8px;bottom:64px;z-index:15;display:flex;flex-direction:column;gap:6px}
+.cbtn{width:42px;height:42px;border-radius:10px;background:rgba(20,28,38,.82);border:1px solid var(--line);
+  font-size:20px;color:var(--ink);display:flex;align-items:center;justify-content:center}
+.cbtn:active{background:#26374c}
+
+/* ── 查詢泡泡 ── */
+#query{position:fixed;z-index:30;background:rgba(14,20,28,.94);border:1px solid var(--amber);
+  border-radius:10px;padding:10px 13px;font-size:12.5px;line-height:1.75;display:none;min-width:150px;
+  box-shadow:0 6px 24px rgba(0,0,0,.5);pointer-events:none}
+#query .qt{color:var(--amber2);font-weight:700;font-size:13.5px}
+#query .dim{color:var(--dim)}
+
+/* ── 彈窗 ── */
+.modal{position:fixed;inset:0;background:rgba(5,8,12,.62);z-index:40;display:none;
+  align-items:center;justify-content:center;padding:16px}
+.modal.show{display:flex}
+.mbox{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;
+  width:min(430px,94vw);max-height:88vh;overflow-y:auto;box-shadow:0 18px 60px rgba(0,0,0,.6)}
+.mbox h2{font-size:18px;color:var(--amber2);letter-spacing:4px;margin-bottom:4px}
+.mbox .sub{font-size:12px;color:var(--dim);margin-bottom:16px}
+.row{display:flex;justify-content:space-between;align-items:center;font-size:13.5px;padding:7px 0;
+  border-bottom:1px dashed #223044;font-variant-numeric:tabular-nums}
+.row b{color:var(--amber2)}
+.row .neg{color:var(--bad)} .row .pos{color:var(--res)}
+.slrow{padding:9px 0;border-bottom:1px dashed #223044}
+.slrow .sl-top{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px}
+input[type=range]{width:100%;accent-color:var(--amber)}
+.bigbtn{display:block;width:100%;margin-top:14px;padding:11px;border-radius:9px;background:var(--amber);
+  color:#221a08;font-weight:700;font-size:15px;letter-spacing:3px}
+.ghost{background:var(--panel2);color:var(--ink);border:1px solid var(--line)}
+.choice{display:flex;gap:8px;margin:8px 0 14px}
+.choice button{flex:1;padding:10px 4px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);font-size:13px}
+.choice button.on{border-color:var(--amber);background:#3a2f14;color:var(--amber2);font-weight:700}
+.dlist button{display:flex;justify-content:space-between;width:100%;padding:11px 8px;font-size:14px;
+  border-bottom:1px dashed #223044}
+.dlist button:active{background:var(--panel2)}
+.mtitle-icon{font-size:26px}
+#nameInput{width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0b1119;
+  color:var(--ink);font-size:15px;margin:4px 0 12px;font-family:inherit}
+
+@media(max-width:640px){
+  .tb-cell{min-width:60px;padding:4px 8px}
+  .tb-cell .val{font-size:13.5px}
+  #toolbar{width:78px}
+  .tool .ic{font-size:16px}.tool .nm{font-size:10px}
+}
+</style>
+</head>
+<body>
+<canvas id="c3d"></canvas>
+
+<!-- 頂部列 -->
+<div id="topbar">
+  <div class="tb-cell" id="cityname"><span class="lab">城市</span><span class="val" id="vName">新市鎮</span></div>
+  <div class="tb-cell"><span class="lab">資金</span><span class="val" id="vFunds">$20,000</span></div>
+  <div class="tb-cell"><span class="lab">人口</span><span class="val" id="vPop">0</span></div>
+  <div class="tb-cell"><span class="lab">日期</span><span class="val" id="vDate">1900年 1月</span></div>
+  <div id="rci" title="RCI 需求">
+    <div class="rcicol"><div class="rcitrack"><div class="rcibar" id="barR"></div><div class="rcizero"></div></div><span>住</span></div>
+    <div class="rcicol"><div class="rcitrack"><div class="rcibar" id="barC"></div><div class="rcizero"></div></div><span>商</span></div>
+    <div class="rcicol"><div class="rcitrack"><div class="rcibar" id="barI"></div><div class="rcizero"></div></div><span>工</span></div>
+  </div>
+  <div class="tb-btns">
+    <button class="sbtn" data-spd="0" title="暫停">⏸</button>
+    <button class="sbtn on" data-spd="1" title="慢速">▶</button>
+    <button class="sbtn" data-spd="2" title="中速">▶▶</button>
+    <button class="sbtn" data-spd="3" title="快速">▶▶▶</button>
+  </div>
+  <div class="tb-btns">
+    <button class="mbtn" id="viewBtn">🚶 走進城市</button>
+    <button class="mbtn" id="budgetBtn">📊 預算</button>
+    <button class="mbtn" id="mapBtn">🗺 圖層</button>
+    <button class="mbtn" id="disBtn">⚠️ 災難</button>
+    <button class="mbtn" id="sndBtn">🔊</button>
+    <button class="mbtn" id="newBtn">🆕 新城市</button>
+  </div>
+</div>
+
+<!-- 左側工具列 -->
+<div id="toolbar"></div>
+
+<!-- 街景提示與搖桿 -->
+<div id="walkHint">W A S D / 方向鍵 移動 ・ 拖曳畫面環顧 ・ Shift 跑步<br>手機:左下搖桿移動,右半邊拖曳環顧</div>
+<div id="stick"><div id="stickKnob"></div></div>
+
+<!-- 圖層圖例 -->
+<div id="legend"></div>
+
+<!-- 鳥瞰視角控制鈕 -->
+<div id="camBtns">
+  <button class="cbtn" id="rotL" title="向左旋轉">⟲</button>
+  <button class="cbtn" id="rotR" title="向右旋轉">⟳</button>
+  <button class="cbtn" id="zIn" title="拉近">＋</button>
+  <button class="cbtn" id="zOut" title="拉遠">−</button>
+</div>
+
+<!-- 查詢泡泡 -->
+<div id="query"></div>
+
+<!-- 訊息帶 -->
+<div id="ticker"><div id="tickerDot"></div><div id="tickerText">歡迎,市長!請先劃設住宅區並接上電力。</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ═══════════ 模擬城市 3D ─ 核心模擬引擎 ═══════════ */
+'use strict';
+const N = 64, TILE = 4, HALF = N*TILE/2;
+
+/* 地格類型 */
+const T = {GRASS:0, WATER:1, TREE:2, ROAD:3, RAIL:4, WIRE:5,
+           RES:6, COM:7, IND:8, PARK:9,
+           POLICE:10, FIRESTA:11, COAL:12, NUKE:13, STADIUM:14, PORT:15, AIRPORT:16,
+           RUBBLE:17, FIRE:18};
+
+/* 建築規格:尺寸、電力容量(可供電格數)、名稱 */
+const BSPEC = {
+  [T.POLICE]:{w:2,name:'警察局'}, [T.FIRESTA]:{w:2,name:'消防局'},
+  [T.COAL]:{w:3,name:'火力發電廠',cap:220}, [T.NUKE]:{w:3,name:'核能發電廠',cap:550},
+  [T.STADIUM]:{w:4,name:'體育場'}, [T.PORT]:{w:3,name:'海港'}, [T.AIRPORT]:{w:5,name:'機場'},
+};
+const TNAME = {0:'草地',1:'水域',2:'樹林',3:'道路',4:'鐵路',5:'電線',6:'住宅區',7:'商業區',
+  8:'工業區',9:'公園',10:'警察局',11:'消防局',12:'火力發電廠',13:'核能發電廠',
+  14:'體育場',15:'海港',16:'機場',17:'瓦礫',18:'火災!'};
+
+/* 工具定義 */
+const TOOLS = [
+  {id:'query', ic:'🔍', nm:'查詢',   pr:0},
+  {id:'doze',  ic:'🚜', nm:'推土機', pr:1},
+  {grp:'交通'},
+  {id:'road',  ic:'🛣️', nm:'道路',   pr:10,  t:T.ROAD},
+  {id:'rail',  ic:'🛤️', nm:'鐵路',   pr:20,  t:T.RAIL},
+  {id:'wire',  ic:'⚡', nm:'電線',   pr:5,   t:T.WIRE},
+  {grp:'分區'},
+  {id:'res',   ic:'🏠', nm:'住宅區', pr:100, t:T.RES},
+  {id:'com',   ic:'🏬', nm:'商業區', pr:100, t:T.COM},
+  {id:'ind',   ic:'🏭', nm:'工業區', pr:100, t:T.IND},
+  {id:'park',  ic:'🌳', nm:'公園',   pr:10,  t:T.PARK},
+  {grp:'公共'},
+  {id:'police',ic:'🚓', nm:'警察局', pr:500, t:T.POLICE},
+  {id:'firesta',ic:'🚒',nm:'消防局', pr:500, t:T.FIRESTA},
+  {id:'stadium',ic:'🏟️',nm:'體育場', pr:5000,t:T.STADIUM},
+  {grp:'電力'},
+  {id:'coal',  ic:'🪨', nm:'火力廠', pr:3000,t:T.COAL},
+  {id:'nuke',  ic:'☢️', nm:'核能廠', pr:5000,t:T.NUKE},
+  {grp:'對外'},
+  {id:'port',  ic:'⚓', nm:'海港',   pr:3000,t:T.PORT},
+  {id:'airport',ic:'✈️',nm:'機場',   pr:10000,t:T.AIRPORT},
+];
+
+/* ── 城市狀態 ── */
+let G = null;                 // 格網 [x][y]
+let city = null;              // 城市總狀態
+const idx = (x,y)=>x*N+y;
+const inB = (x,y)=>x>=0&&y>=0&&x<N&&y<N;
+
+function newCell(t){ return {t, lvl:0, pow:false, ax:-1, ay:-1, fire:0, br:false, wr:false, v:Math.random()}; }
+
+function newCity(name, funds){
+  city = {
+    name, funds, tax:7,
+    year:1900, month:0,          // month 0-11
+    pop:0, resSum:0, comSum:0, indSum:0,
+    demR:0.6, demC:0, demI:0.4, ext:20,
+    fundRoad:1, fundPolice:1, fundFire:1,
+    lastIncome:0, lastExpense:0,
+    autoDisaster:true, milestones:{},
+    powerOK:true, title:'拓荒地',
+  };
+  genTerrain();
+  // 統計圖層
+  city.pollution = new Float32Array(N*N);
+  city.crime     = new Float32Array(N*N);
+  city.landv     = new Float32Array(N*N);
+  city.traffic   = new Float32Array(N*N);
+  city.policeCov = new Float32Array(N*N);
+  city.fireCov   = new Float32Array(N*N);
+  computePower();
+  computeStats();
+}
+
+/* ── 地形生成:蜿蜒河流 + 湖泊 + 樹叢 ── */
+function genTerrain(){
+  G = [];
+  for(let x=0;x<N;x++){ G[x]=[]; for(let y=0;y<N;y++) G[x][y]=newCell(T.GRASS); }
+  // 河流:自上而下的隨機漫步,寬 2~3
+  let rx = 8 + Math.random()*(N-16);
+  for(let y=0;y<N;y++){
+    rx += (Math.random()-0.5)*2.4;
+    rx = Math.max(3, Math.min(N-4, rx));
+    const w = 1 + (Math.sin(y*0.25)+1)*0.8;
+    for(let dx=-Math.ceil(w); dx<=Math.ceil(w); dx++){
+      const x = Math.round(rx)+dx;
+      if(inB(x,y)) G[x][y].t = T.WATER;
+    }
+  }
+  // 湖泊
+  const lakes = 1+Math.floor(Math.random()*2);
+  for(let i=0;i<lakes;i++){
+    const cx=6+Math.random()*(N-12), cy=6+Math.random()*(N-12), r=2.5+Math.random()*3;
+    for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+      if((x-cx)**2+(y-cy)**2 < r*r) G[x][y].t=T.WATER;
+    }
+  }
+  // 樹叢
+  const clumps = 26;
+  for(let i=0;i<clumps;i++){
+    const cx=Math.random()*N, cy=Math.random()*N, r=1.5+Math.random()*3.5;
+    for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+      if(G[x][y].t===T.GRASS && (x-cx)**2+(y-cy)**2 < r*r && Math.random()<0.75) G[x][y].t=T.TREE;
+    }
+  }
+}
+
+/* ── 建造與拆除 ── */
+const isZone = t => t===T.RES||t===T.COM||t===T.IND;
+const isBigB = t => BSPEC[t]!==undefined;
+const flammable = t => isZone(t)||t===T.TREE||isBigB(t)||t===T.PARK;
+const buildable = c => c.t===T.GRASS || c.t===T.TREE;
+
+function toolCost(tl){ return tl.pr; }
+
+function place(tool, x, y){
+  const tl = TOOLS.find(o=>o.id===tool); if(!tl) return false;
+  if(tool==='doze') return doze(x,y);
+  const t = tl.t;
+  const w = isBigB(t) ? BSPEC[t].w : 1;
+  if(x+w>N || y+w>N) return false;
+  const isTrans = t===T.ROAD||t===T.RAIL||t===T.WIRE;
+  // 電線與道路/鐵路交叉:不覆蓋原地格,以 wr 旗標疊加(橋面不可交叉)
+  const c0 = G[x][y];
+  if(t===T.WIRE && (c0.t===T.ROAD||c0.t===T.RAIL) && !c0.br){
+    if(c0.wr) return false;
+    if(city.funds < tl.pr){ toast('資金不足!'); sfx('deny'); return false; }
+    city.funds -= tl.pr;
+    c0.wr = true;
+    computePower();
+    sfx('build'); dirty=true; updateHUD();
+    return true;
+  }
+  if((t===T.ROAD||t===T.RAIL) && c0.t===T.WIRE && !c0.br){
+    if(city.funds < tl.pr){ toast('資金不足!'); sfx('deny'); return false; }
+    city.funds -= tl.pr;
+    c0.t=t; c0.wr=true; c0.lvl=0; c0.fire=0; c0.ax=x; c0.ay=y;
+    computePower();
+    sfx('build'); dirty=true; updateHUD();
+    return true;
+  }
+  const onWater = isTrans && G[x][y].t===T.WATER;   // 跨河橋
+  for(let i=0;i<w;i++)for(let j=0;j<w;j++){
+    const cc=G[x+i][y+j];
+    if(!(buildable(cc) || (isTrans && cc.t===T.WATER))) return false;
+  }
+  if(t===T.PORT){
+    let nearWater=false;
+    for(let i=-1;i<=w;i++)for(let j=-1;j<=w;j++){
+      if(inB(x+i,y+j)&&G[x+i][y+j].t===T.WATER) nearWater=true;
+    }
+    if(!nearWater){ toast('海港必須緊鄰水域。'); return false; }
+  }
+  const cost = onWater ? tl.pr*5 : tl.pr;
+  if(city.funds < cost){ toast(onWater?'橋梁造價為 5 倍,資金不足!':'資金不足!'); sfx('deny'); return false; }
+  city.funds -= cost;
+  for(let i=0;i<w;i++)for(let j=0;j<w;j++){
+    const c=G[x+i][y+j];
+    const wasWater = c.t===T.WATER;
+    c.t=t; c.lvl=0; c.fire=0; c.ax=x; c.ay=y; c.v=Math.random();
+    c.br = isTrans && wasWater; c.wr=false;
+  }
+  computePower();
+  sfx('build'); dirty=true; updateHUD();
+  return true;
+}
+
+function doze(x,y){
+  const c = G[x][y];
+  if(c.wr){   // 交叉電線先拆,保留道路/鐵路
+    if(city.funds < 1){ toast('資金不足!'); return false; }
+    city.funds -= 1;
+    c.wr=false;
+    computePower();
+    sfx('doze'); dirty=true; updateHUD();
+    return true;
+  }
+  if(c.t===T.GRASS||c.t===T.WATER) return false;
+  let cells=[[x,y]];
+  if(isBigB(c.t) && c.ax>=0){
+    const t0=c.t, ax=c.ax, ay=c.ay, w=BSPEC[c.t].w; cells=[];
+    for(let i=0;i<w;i++)for(let j=0;j<w;j++){
+      const cx=ax+i, cy=ay+j;
+      if(inB(cx,cy) && G[cx][cy].t===t0) cells.push([cx,cy]);
+    }
+    if(!cells.length) cells=[[x,y]];
+  }
+  const cost = cells.length;
+  if(city.funds < cost){ toast('資金不足!'); return false; }
+  city.funds -= cost;
+  for(const [cx,cy] of cells){
+    const cc=G[cx][cy];
+    cc.t = cc.br ? T.WATER : T.GRASS;
+    cc.br=false; cc.wr=false; cc.lvl=0; cc.fire=0; cc.ax=-1; cc.ay=-1;
+  }
+  computePower();
+  sfx('doze'); dirty=true; updateHUD();
+  return true;
+}
+
+/* ── 電力網:從電廠 BFS,依容量供電 ── */
+function computePower(){
+  const conductive = c => c.t===T.WIRE || c.wr || isZone(c.t) || isBigB(c.t);
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++) G[x][y].pow=false;
+  const seen = new Uint8Array(N*N);
+  let anyPlant=false, blackout=false;
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const c=G[x][y];
+    if((c.t===T.COAL||c.t===T.NUKE) && !seen[idx(x,y)]){
+      anyPlant=true;
+      // 蒐集連通元件
+      const q=[[x,y]]; seen[idx(x,y)]=1;
+      const comp=[]; let cap=0;
+      while(q.length){
+        const [cx,cy]=q.pop(); const cc=G[cx][cy];
+        comp.push([cx,cy]);
+        if((cc.t===T.COAL||cc.t===T.NUKE) && cc.ax===cx && cc.ay===cy) cap += BSPEC[cc.t].cap;
+        for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+          const nx=cx+dx, ny=cy+dy;
+          if(inB(nx,ny) && !seen[idx(nx,ny)] && conductive(G[nx][ny])){
+            seen[idx(nx,ny)]=1; q.push([nx,ny]);
+          }
+        }
+      }
+      // 消耗:分區與建築格各 1;依 BFS 順序供電到容量為止
+      let used=0;
+      for(const [cx,cy] of comp){
+        const cc=G[cx][cy];
+        if(cc.t===T.WIRE || cc.wr){ cc.pow=true; continue; }
+        if(used<cap){ cc.pow=true; used++; } else blackout=true;
+      }
+    }
+  }
+  city.powerOK = anyPlant && !blackout;
+  return blackout;
+}
+
+/* ── 道路可達性:距道路/鐵路 3 格內 ── */
+function computeAccess(){
+  const acc = new Uint8Array(N*N);
+  const q=[];
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    if(G[x][y].t===T.ROAD||G[x][y].t===T.RAIL){ acc[idx(x,y)]=1; q.push([x,y,0]); }
+  }
+  let head=0;
+  while(head<q.length){
+    const [cx,cy,d]=q[head++]; if(d>=3) continue;
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=cx+dx, ny=cy+dy;
+      if(inB(nx,ny)&&!acc[idx(nx,ny)]){ acc[idx(nx,ny)]=1; q.push([nx,ny,d+1]); }
+    }
+  }
+  return acc;
+}
+
+/* ── 統計圖層:污染、地價、犯罪、交通、警消覆蓋 ── */
+function blur(map, passes){
+  const tmp = new Float32Array(N*N);
+  for(let p=0;p<passes;p++){
+    for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+      let s=map[idx(x,y)]*2, n=2;
+      if(x>0){s+=map[idx(x-1,y)];n++;} if(x<N-1){s+=map[idx(x+1,y)];n++;}
+      if(y>0){s+=map[idx(x,y-1)];n++;} if(y<N-1){s+=map[idx(x,y+1)];n++;}
+      tmp[idx(x,y)]=s/n;
+    }
+    map.set(tmp);
+  }
+}
+function radial(map, cx, cy, R, amt){
+  const r2=R*R;
+  for(let x=Math.max(0,cx-R);x<=Math.min(N-1,cx+R);x++)
+    for(let y=Math.max(0,cy-R);y<=Math.min(N-1,cy+R);y++){
+      const d2=(x-cx)**2+(y-cy)**2;
+      if(d2<r2) map[idx(x,y)] += amt*(1-Math.sqrt(d2)/R);
+    }
+}
+
+function computeStats(){
+  const pol=city.pollution, cri=city.crime, lv=city.landv, tra=city.traffic,
+        pc=city.policeCov, fc=city.fireCov;
+  pol.fill(0); cri.fill(0); lv.fill(0); tra.fill(0); pc.fill(0); fc.fill(0);
+
+  // 交通:每個已發展分區向最近道路輻射
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const c=G[x][y];
+    if(isZone(c.t)&&c.lvl>0) radial(tra,x,y,4,c.lvl*7);
+  }
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    if(G[x][y].t!==T.ROAD&&G[x][y].t!==T.RAIL) tra[idx(x,y)]*=0.25;
+  }
+
+  // 污染源
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const c=G[x][y], i=idx(x,y);
+    if(c.t===T.IND) pol[i]+=18+c.lvl*11;
+    if(c.t===T.COAL) pol[i]+=65;
+    if(c.t===T.AIRPORT) pol[i]+=28;
+    if(c.t===T.FIRE) pol[i]+=45;
+    if(c.t===T.RUBBLE) pol[i]+=8;
+    pol[i]+=tra[i]*0.22;
+  }
+  blur(pol,3);
+
+  // 警消覆蓋(依撥款比例縮放)
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const c=G[x][y];
+    if(c.ax===x&&c.ay===y){
+      if(c.t===T.POLICE) radial(pc,x+1,y+1,Math.round(13*city.fundPolice)+1,100);
+      if(c.t===T.FIRESTA) radial(fc,x+1,y+1,Math.round(13*city.fundFire)+1,100);
+    }
+  }
+
+  // 地價:近水近公園加分、污染犯罪扣分、市中心微幅加成
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const c=G[x][y], i=idx(x,y);
+    let v=28;
+    if(c.t===T.PARK) v+=25;
+    v -= Math.abs(x-N/2)*0.18 + Math.abs(y-N/2)*0.18;
+    lv[i]=v;
+  }
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const c=G[x][y];
+    if(c.t===T.WATER) radial(lv,x,y,4,9);
+    if(c.t===T.PARK)  radial(lv,x,y,5,14);
+    if(c.t===T.STADIUM&&c.ax===x&&c.ay===y) radial(lv,x+2,y+2,8,12);
+  }
+  for(let i=0;i<N*N;i++) lv[i]=Math.max(0, lv[i]-city.pollution[i]*0.45);
+  blur(lv,2);
+
+  // 犯罪:人口密度 − 地價 − 警力
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const c=G[x][y], i=idx(x,y);
+    let cr=0;
+    if(isZone(c.t)) cr = c.lvl*14 - lv[i]*0.35 - pc[i]*0.6;
+    cri[i]=Math.max(0,cr);
+  }
+  blur(cri,2);
+}
+
+/* ── 每月模擬節拍 ── */
+function simMonth(){
+  const blackout = computePower();
+  const acc = computeAccess();
+
+  // 分區生長/衰退
+  let resSum=0, comSum=0, indSum=0;
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const c=G[x][y], i=idx(x,y);
+    if(!isZone(c.t)) continue;
+    const dem = c.t===T.RES?city.demR : c.t===T.COM?city.demC : city.demI;
+    const envBad = (city.pollution[i]>55?0.35:0) + (city.crime[i]>55?0.35:0);
+    if(c.pow && acc[i] && dem>0 && c.lvl<5){
+      const p = 0.10 + dem*0.45 + (city.landv[i]>34?0.08:0) - envBad;
+      if(Math.random()<p) c.lvl++;
+    } else if(!c.pow || dem<-0.25 || envBad>0.4){
+      if(c.lvl>0 && Math.random() < (!c.pow?0.35:0.12)) c.lvl--;
+    }
+    if(c.t===T.RES) resSum+=c.lvl; else if(c.t===T.COM) comSum+=c.lvl; else indSum+=c.lvl;
+  }
+  city.resSum=resSum; city.comSum=comSum; city.indSum=indSum;
+  city.pop = resSum*22;
+
+  // 對外市場緩慢成長,海港/機場加速
+  let boost=1;
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const c=G[x][y];
+    if(c.ax===x&&c.ay===y){ if(c.t===T.PORT)boost+=0.5; if(c.t===T.AIRPORT)boost+=0.7; }
+  }
+  city.ext += 0.25*boost;
+
+  // RCI 需求
+  const jobs = comSum+indSum;
+  const taxPen = (city.tax-7)*0.055;
+  let stadiumBonus = 0;
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++)
+    if(G[x][y].t===T.STADIUM&&G[x][y].ax===x&&G[x][y].ay===y) stadiumBonus=0.12;
+  city.demR = clamp(((jobs+14)*1.35 - resSum)/55 - taxPen + stadiumBonus, -1, 1);
+  city.demC = clamp((resSum*0.62 - comSum)/45 - taxPen, -1, 1);
+  city.demI = clamp((city.ext + resSum*0.42 - indSum)/50 - taxPen*1.2, -1, 1);
+
+  // 火災蔓延與燒毀
+  const burning=[];
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++) if(G[x][y].t===T.FIRE) burning.push([x,y]);
+  for(const [x,y] of burning){
+    const c=G[x][y];
+    c.fire++;
+    const cov = city.fireCov[idx(x,y)];
+    if(c.fire>2 && Math.random() < 0.3+cov/160){ c.t=T.RUBBLE; c.fire=0; continue; }
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=x+dx, ny=y+dy;
+      if(!inB(nx,ny)) continue;
+      const nc=G[nx][ny];
+      if(flammable(nc.t) && Math.random() < Math.max(0.03, 0.32 - cov/280)){
+        igniteCell(nx,ny);
+      }
+    }
+  }
+  if(burning.length) dirty=true;
+
+  // 財政(逐月)
+  const income = (resSum*1.0 + comSum*1.6 + indSum*1.6) * city.tax * 0.32;
+  let roads=0, rails=0, police=0, fire=0;
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const c=G[x][y];
+    if(c.t===T.ROAD)roads++; else if(c.t===T.RAIL)rails++;
+    if(c.ax===x&&c.ay===y){ if(c.t===T.POLICE)police++; if(c.t===T.FIRESTA)fire++; }
+  }
+  const expense = (roads*0.18+rails*0.5)*city.fundRoad + police*24*city.fundPolice + fire*24*city.fundFire;
+  city.funds += Math.round(income - expense);
+  city.lastIncome = Math.round(income); city.lastExpense = Math.round(expense);
+  city.roadCount=roads; city.railCount=rails; city.policeCount=police; city.fireCount=fire;
+
+  // 隨機災難
+  if(city.autoDisaster && Math.random()<0.006 && city.pop>800){
+    const pick = ['fire','flood','tornado','quake','monster','crash'][Math.floor(Math.random()*6)];
+    triggerDisaster(pick, true);
+  }
+
+  computeStats();
+
+  // 時間推進與訊息
+  city.month++;
+  if(city.month>=12){
+    city.month=0; city.year++;
+    if(city.funds>0) sfx('cash');
+    toast(`${city.year} 年度結算:稅收 $${city.lastIncome*12|0},支出 $${city.lastExpense*12|0}(月均×12)`);
+  }
+  checkMilestones(blackout);
+  dirty=true;
+  updateHUD();
+}
+
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+
+function igniteCell(x,y){
+  const c=G[x][y];
+  if(c.br) return;
+  if(isBigB(c.t) && c.ax>=0){ // 大建築整棟燒
+    const t0=c.t, ax=c.ax, ay=c.ay, w=BSPEC[c.t].w;
+    for(let i=0;i<w;i++)for(let j=0;j<w;j++){
+      const cx=ax+i, cy=ay+j;
+      if(!inB(cx,cy)) continue;
+      const cc=G[cx][cy];
+      if(cc.t===t0){ cc.t=T.FIRE; cc.fire=0; cc.ax=-1; cc.ay=-1; }
+    }
+  } else { c.t=T.FIRE; c.fire=0; c.lvl=0; c.ax=-1; c.ay=-1; }
+}
+
+function checkMilestones(blackout){
+  const M=city.milestones;
+  const marks=[[500,'村莊'],[2000,'城鎮'],[10000,'城市'],[30000,'都會'],[60000,'大都會']];
+  for(const [p,t] of marks){
+    if(city.pop>=p && !M[p]){ M[p]=true; city.title=t;
+      toast(`🎉 恭喜!人口達 ${p.toLocaleString()},晉升為「${t}」!`); sfx('cash'); }
+  }
+  if(blackout && !M.bo){ M.bo=true; toast('⚡ 部分區域停電!請增建電廠或檢查電線。'); sfx('alarm'); }
+  if(!blackout) M.bo=false;
+  if(city.funds<0 && !M.debt){ M.debt=true; toast('💸 市庫赤字!考慮提高稅率或減少撥款。'); }
+  if(city.funds>=0) M.debt=false;
+}
+
+/* ── 災難 ── */
+let tornadoE=null, monsterE=null;   // 動態實體
+function triggerDisaster(kind, auto){
+  const randTile = ()=>[2+Math.floor(Math.random()*(N-4)), 2+Math.floor(Math.random()*(N-4))];
+  if(kind==='fire'){
+    for(let tries=0;tries<80;tries++){
+      const [x,y]=randTile();
+      if(flammable(G[x][y].t)){ igniteCell(x,y); toast('🔥 火災爆發!'); break; }
+    }
+  }
+  if(kind==='flood'){
+    const cand=[];
+    for(let x=1;x<N-1;x++)for(let y=1;y<N-1;y++){
+      if(G[x][y].t!==T.WATER) continue;
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])
+        if(G[x+dx][y+dy].t!==T.WATER) cand.push([x+dx,y+dy]);
+    }
+    let n=Math.min(45,cand.length);
+    while(n-->0){
+      const [x,y]=cand[Math.floor(Math.random()*cand.length)];
+      const c=G[x][y]; c.t=T.RUBBLE; c.wr=false; c.lvl=0; c.ax=-1; c.ay=-1;
+    }
+    toast('🌊 洪水氾濫!沿岸地區受災。');
+  }
+  if(kind==='tornado'){
+    const [x,y]=randTile();
+    tornadoE={x, z:y, vx:(Math.random()-0.5), vz:(Math.random()-0.5), life:38, step:0};
+    toast('🌪 龍捲風登陸!');
+  }
+  if(kind==='quake'){
+    let n=90;
+    while(n-->0){
+      const [x,y]=randTile(); const c=G[x][y];
+      if(c.t===T.WATER||c.t===T.GRASS) continue;
+      if(Math.random()<0.25 && flammable(c.t)) igniteCell(x,y);
+      else { if(isBigB(c.t)){c.ax=-1;c.ay=-1;} c.t=T.RUBBLE; c.wr=false; c.lvl=0; }
+    }
+    quake=1.4;
+    toast('🫨 大地震!全市受創。');
+  }
+  if(kind==='monster'){
+    // 從邊緣出現,走向污染最高處
+    let best=0, bx=N/2, by=N/2;
+    for(let i=0;i<N*N;i++) if(city.pollution[i]>best){best=city.pollution[i];bx=(i/N)|0;by=i%N;}
+    monsterE={x:0, z:Math.floor(Math.random()*N), tx:bx, tz:by, life:110, step:0, ph:0};
+    toast('🦖 巨獸從水域現身,朝工業區前進!');
+  }
+  if(kind==='crash'){
+    const [x,y]=randTile();
+    for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++){
+      if(!inB(x+i,y+j)) continue;
+      const c=G[x+i][y+j];
+      if(c.t===T.WATER) continue;
+      if(flammable(c.t)||c.t===T.GRASS){ igniteCell(x+i,y+j); }
+    }
+    toast('✈️💥 飛機失事墜毀!');
+  }
+  if(!auto) sfx('alarm');
+  else sfx('alarm');
+  computePower();
+  dirty=true;
+}
+
+/* 災難實體逐步推進(由主迴圈以 0.22s 間隔呼叫) */
+function stepEntities(){
+  if(tornadoE){
+    const e=tornadoE;
+    e.vx += (Math.random()-0.5)*0.6; e.vz += (Math.random()-0.5)*0.6;
+    const sp=Math.hypot(e.vx,e.vz)||1; e.vx/=sp; e.vz/=sp;
+    e.x=clamp(e.x+e.vx,1,N-2); e.z=clamp(e.z+e.vz,1,N-2);
+    const tx=Math.round(e.x), tz=Math.round(e.z);
+    const c=G[tx][tz];
+    if(c.t!==T.WATER && c.t!==T.GRASS){
+      if(isBigB(c.t)){c.ax=-1;c.ay=-1;}
+      c.t = c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.lvl=0; dirty=true;
+    }
+    if(--e.life<=0){ tornadoE=null; toast('龍捲風消散了。'); }
+  }
+  if(monsterE){
+    const e=monsterE;
+    e.x += Math.sign(e.tx-e.x)*(Math.random()<0.8?1:0);
+    e.z += Math.sign(e.tz-e.z)*(Math.random()<0.8?1:0);
+    e.ph++;
+    for(let i=-1;i<=0;i++)for(let j=-1;j<=0;j++){
+      const cx=Math.round(e.x)+i, cy=Math.round(e.z)+j;
+      if(!inB(cx,cy)) continue;
+      const c=G[cx][cy];
+      if(c.t!==T.WATER && c.t!==T.GRASS){
+        if(isBigB(c.t)){c.ax=-1;c.ay=-1;}
+        if(Math.random()<0.3 && flammable(c.t)) igniteCell(cx,cy);
+        else {c.t=c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.lvl=0;}
+        dirty=true;
+      }
+    }
+    if(Math.abs(e.x-e.tx)<1 && Math.abs(e.z-e.tz)<1){ e.tx=Math.random()*N; e.tz=Math.random()*N; }
+    if(--e.life<=0){ monsterE=null; toast('巨獸返回水域深處……'); }
+  }
+}
+
+/* ═══════════ 3D 渲染器(低多邊形) ═══════════ */
+let renderer, scene, camBird, camWalk, activeCam;
+let groundMesh, boxMesh, coneMesh, cylMesh, carMesh;
+let boxN=0, coneN=0, cylN=0, groundN=0;
+const BOX_CAP=34000, CONE_CAP=9000, CYL_CAP=3000, CAR_CAP=140, GROUND_CAP=N*N*2;
+let dirty=true, groundDirty=true;
+let quake=0;
+let overlay='none';         // none|power|pollution|crime|landv|traffic
+const _d=new THREE.Object3D(), _c=new THREE.Color();
+
+const wx = x => (x - N/2)*TILE + TILE/2;
+const wz = y => (y - N/2)*TILE + TILE/2;
+
+function initGL(){
+  const canvas = document.getElementById('c3d');
+  renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x9fd4ea);
+  scene.fog = new THREE.Fog(0x9fd4ea, 180, 480);
+
+  const hemi = new THREE.HemisphereLight(0xdfeeff, 0x6f7f66, 0.72);
+  scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xfff3d8, 0.75);
+  sun.position.set(120, 200, 80);
+  scene.add(sun);
+
+  camBird = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 1, 1200);
+  camWalk = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.3, 900);
+  activeCam = camBird;
+
+  // 自訂 shader:逐實例顏色 aCol + 太陽/半球光 + 霧(完全繞開 r128 instanceColor 相容性問題)
+  const INST_VERT = `
+    attribute vec3 aCol;
+    uniform vec3 sunDir;
+    varying vec3 vCol;
+    varying float vFogDepth;
+    void main(){
+      #ifdef USE_INSTANCING
+        vec4 mp = instanceMatrix * vec4(position, 1.0);
+        vec3 n = normalize(mat3(instanceMatrix) * normal);
+      #else
+        vec4 mp = vec4(position, 1.0);
+        vec3 n = normal;
+      #endif
+      float dif = max(dot(n, sunDir), 0.0);
+      float hemi = n.y * 0.5 + 0.5;
+      vec3 light = vec3(0.60, 0.63, 0.66) * (0.50 + 0.50 * hemi)
+                 + vec3(1.00, 0.95, 0.84) * dif * 0.58;
+      vCol = aCol * min(light, vec3(1.2));
+      vec4 mv = modelViewMatrix * mp;
+      vFogDepth = -mv.z;
+      gl_Position = projectionMatrix * mv;
+    }`;
+  const INST_FRAG = `
+    uniform vec3 fogColor;
+    uniform float fogNear;
+    uniform float fogFar;
+    varying vec3 vCol;
+    varying float vFogDepth;
+    void main(){
+      float f = smoothstep(fogNear, fogFar, vFogDepth);
+      gl_FragColor = vec4(mix(vCol, fogColor, f), 1.0);
+    }`;
+  instMat = new THREE.ShaderMaterial({
+    uniforms:{
+      sunDir:{value:new THREE.Vector3(120,200,80).normalize()},
+      fogColor:{value:new THREE.Color(0x9fd4ea)},
+      fogNear:{value:180}, fogFar:{value:480},
+    },
+    vertexShader:INST_VERT, fragmentShader:INST_FRAG,
+  });
+  const makeInst = (geo, cap)=>{
+    geo.setAttribute('aCol', new THREE.InstancedBufferAttribute(new Float32Array(cap*3).fill(1), 3));
+    const m = new THREE.InstancedMesh(geo, instMat, cap);
+    m.count=0; m.frustumCulled=false; scene.add(m);
+    return m;
+  };
+  groundMesh = makeInst(new THREE.BoxGeometry(1,1,1), GROUND_CAP);
+  boxMesh    = makeInst(new THREE.BoxGeometry(1,1,1), BOX_CAP);
+  coneMesh   = makeInst(new THREE.ConeGeometry(0.7,1,4), CONE_CAP);
+  cylMesh    = makeInst(new THREE.CylinderGeometry(0.5,0.62,1,8), CYL_CAP);
+  carMesh    = makeInst(new THREE.BoxGeometry(1.3,0.62,0.72), CAR_CAP);
+
+  // 邊界基座(城市浮島感)
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(N*TILE+8, 14, N*TILE+8),
+    new THREE.MeshBasicMaterial({color:0x5d4e3b}));
+  base.position.y=-7.6; scene.add(base);
+
+  // 龍捲風 / 巨獸模型(平時隱藏)
+  tornadoMesh = new THREE.Mesh(
+    new THREE.ConeGeometry(5,26,7,3,true),
+    new THREE.MeshBasicMaterial({color:0x8d99a6, transparent:true, opacity:0.82}));
+  tornadoMesh.visible=false; scene.add(tornadoMesh);
+  monsterG = buildMonster(); monsterG.visible=false; scene.add(monsterG);
+
+  window.addEventListener('resize', ()=>{
+    renderer.setSize(innerWidth, innerHeight);
+    camBird.aspect=camWalk.aspect=innerWidth/innerHeight;
+    camBird.updateProjectionMatrix(); camWalk.updateProjectionMatrix();
+  });
+}
+let tornadoMesh=null, monsterG=null, instMat=null;
+function buildMonster(){
+  const g=new THREE.Group();
+  const red=new THREE.MeshBasicMaterial({color:0xa8362b});
+  const dark=new THREE.MeshBasicMaterial({color:0x6e211c});
+  const body=new THREE.Mesh(new THREE.BoxGeometry(4.6,7,3.4),red); body.position.y=6; g.add(body);
+  const head=new THREE.Mesh(new THREE.BoxGeometry(3.2,2.6,3),red); head.position.set(0,10.6,0.6); g.add(head);
+  const jaw=new THREE.Mesh(new THREE.BoxGeometry(2.6,1,2.6),dark); jaw.position.set(0,9.2,1.2); g.add(jaw);
+  for(const s of [-1,1]){
+    const eye=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.5,0.4),
+      new THREE.MeshBasicMaterial({color:0xffe14d}));
+    eye.position.set(s*0.9,11.1,2.1); g.add(eye);
+    const leg=new THREE.Mesh(new THREE.BoxGeometry(1.5,4.2,1.7),dark);
+    leg.position.set(s*1.5,2.1,0); leg.userData.leg=s; g.add(leg);
+    const arm=new THREE.Mesh(new THREE.BoxGeometry(1,3.6,1.1),dark);
+    arm.position.set(s*2.9,6.8,0.6); g.add(arm);
+  }
+  const tail=new THREE.Mesh(new THREE.BoxGeometry(1.4,1.4,5),dark);
+  tail.position.set(0,3.6,-3.6); g.add(tail);
+  return g;
+}
+
+/* ── 實例寫入輔助 ── */
+function wCol(mesh, i, hex){
+  _c.set(hex);
+  mesh.geometry.attributes.aCol.setXYZ(i, _c.r, _c.g, _c.b);
+}
+function flushInst(mesh, n){
+  mesh.count = n;
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.geometry.attributes.aCol.needsUpdate = true;
+}
+function pBox(x,y,z,sx,sy,sz,color,ry){
+  if(boxN>=BOX_CAP)return;
+  _d.position.set(x,y,z); _d.scale.set(sx,sy,sz); _d.rotation.set(0,ry||0,0);
+  _d.updateMatrix();
+  boxMesh.setMatrixAt(boxN,_d.matrix); wCol(boxMesh,boxN,color); boxN++;
+}
+function pCone(x,y,z,r,h,color,ry){
+  if(coneN>=CONE_CAP)return;
+  _d.position.set(x,y,z); _d.scale.set(r/0.7,h,r/0.7); _d.rotation.set(0,ry||Math.PI/4,0);
+  _d.updateMatrix();
+  coneMesh.setMatrixAt(coneN,_d.matrix); wCol(coneMesh,coneN,color); coneN++;
+}
+function pCyl(x,y,z,r,h,color){
+  if(cylN>=CYL_CAP)return;
+  _d.position.set(x,y,z); _d.scale.set(r/0.5,h,r/0.5); _d.rotation.set(0,0,0);
+  _d.updateMatrix();
+  cylMesh.setMatrixAt(cylN,_d.matrix); wCol(cylMesh,cylN,color); cylN++;
+}
+
+/* ── 地面重建(含圖層覆蓋色) ── */
+const GCOL={grass:0x7fb069, grass2:0x74a55f, water:0x3f7fbf, road:0x4a4f57, rail:0x6a5f52,
+  zoneR:0x9fcf8f, zoneC:0x9fb9dd, zoneI:0xd8c98a, rubble:0x8a7a66, dirt:0x8f7f5f};
+
+function heat(v, max){ // 0..max → 綠黃紅
+  const t=clamp(v/max,0,1);
+  _c.setHSL(0.33*(1-t), 0.75, 0.42);
+  return _c.getHex();
+}
+
+function rebuildGround(){
+  groundN=0;
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const c=G[x][y], i=idx(x,y);
+    let col, h=0.6, yo=-0.3;
+    switch(c.t){
+      case T.WATER: col=GCOL.water; h=0.36; yo=-0.5; break;
+      case T.ROAD: col=c.br?GCOL.water:GCOL.road; if(c.br){h=0.36;yo=-0.5;} break;
+      case T.RAIL: col=c.br?GCOL.water:GCOL.rail; if(c.br){h=0.36;yo=-0.5;} break;
+      case T.WIRE: if(c.br){col=GCOL.water;h=0.36;yo=-0.5;} else col=((x+y)&1)?GCOL.grass:GCOL.grass2; break;
+      case T.RES: col=c.lvl?GCOL.grass:GCOL.zoneR; break;
+      case T.COM: col=c.lvl?GCOL.grass:GCOL.zoneC; break;
+      case T.IND: col=c.lvl?GCOL.dirt:GCOL.zoneI; break;
+      case T.RUBBLE: col=GCOL.rubble; break;
+      case T.FIRE: col=0x3a2a1a; break;
+      default: col=((x+y)&1)?GCOL.grass:GCOL.grass2;
+    }
+    if(isBigB(c.t)) col=0x9aa2ac;
+    // 圖層覆蓋
+    if(overlay!=='none' && c.t!==T.WATER){
+      if(overlay==='power') col = (isZone(c.t)||isBigB(c.t)) ? (c.pow?0x35c26b:0xd6453a) : ((c.t===T.WIRE||c.wr)?(c.pow?0x9fe8bb:0xe8a49f):0x39424e);
+      if(overlay==='pollution') col=heat(city.pollution[i],90);
+      if(overlay==='crime') col=heat(city.crime[i],80);
+      if(overlay==='landv'){ const t=clamp(city.landv[i]/60,0,1); _c.setHSL(0.6,0.6,0.18+t*0.45); col=_c.getHex(); }
+      if(overlay==='traffic') col=heat(city.traffic[i],60);
+    }
+    _d.position.set(wx(x), yo, wz(y)); _d.scale.set(TILE,h,TILE); _d.rotation.set(0,0,0);
+    _d.updateMatrix();
+    groundMesh.setMatrixAt(groundN,_d.matrix); wCol(groundMesh,groundN,col); groundN++;
+  }
+  flushInst(groundMesh, groundN);
+  groundDirty=false;
+}
+
+/* ── 建物重建 ── */
+const RESWALL=[0xf2e7d5,0xe8d9c3,0xf5efe0,0xdcd0bb];
+const ROOFCOL=[0xc0574a,0x7d6b5d,0x5f7d8c,0xa8703f];
+
+function rebuildCity(){
+  boxN=0; coneN=0; cylN=0;
+  const seasonNoOverlay = overlay==='none';
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const c=G[x][y];
+    const X=wx(x), Z=wz(y);
+    const vr=c.v;
+    switch(c.t){
+      case T.TREE:
+        pCyl(X,0.45,Z,0.16,0.9,0x6d4c33);
+        pCone(X,1.6,Z,1.15,2.3,vr<0.5?0x3e7c47:0x4f9152, vr*3);
+        if(vr>0.72) pCone(X+1.1,1.1,Z-0.8,0.8,1.6,0x3a7343, vr*5);
+        break;
+      case T.ROAD: drawRoadDeco(x,y,X,Z); break;
+      case T.RAIL: drawRail(x,y,X,Z); break;
+      case T.WIRE: drawWire(x,y,X,Z,c.pow); break;
+      case T.RES: drawRes(c,X,Z); break;
+      case T.COM: drawCom(c,X,Z); break;
+      case T.IND: drawInd(c,X,Z); break;
+      case T.PARK:
+        pBox(X,0.06,Z,TILE*0.96,0.12,TILE*0.96,0x5c9e57);
+        pCyl(X-0.9,0.4,Z+0.7,0.13,0.8,0x6d4c33);
+        pCone(X-0.9,1.35,Z+0.7,0.9,1.7,0x4f9152,vr*4);
+        pCyl(X+1,0.4,Z-0.8,0.13,0.8,0x6d4c33);
+        pCone(X+1,1.3,Z-0.8,0.8,1.6,0x3e7c47,vr*2);
+        pBox(X+0.8,0.28,Z+1.1,1.2,0.28,0.55,0x8f6b3f); // 長椅
+        break;
+      case T.RUBBLE:
+        pBox(X-0.7,0.35,Z+0.4,1.3,0.7,1.1,0x776a58,vr*2);
+        pBox(X+0.8,0.25,Z-0.6,1.0,0.5,1.3,0x8a7c68,vr*4);
+        break;
+      case T.FIRE:
+        pCone(X,1.5,Z,1.5,3.0,0xe8632a, vr*6);
+        pCone(X+0.5,1.0,Z+0.5,0.9,2.0,0xffb23e, vr*3);
+        pCone(X-0.6,0.9,Z-0.4,0.8,1.8,0xffd23e, vr*8);
+        break;
+    }
+    // 道路/鐵路上的交叉電線
+    if(c.wr) drawWire(x,y,X,Z,c.pow);
+    // 大建築只在錨點畫一次
+    if(isBigB(c.t) && c.ax===x && c.ay===y) drawBig(c,x,y);
+    // 停電閃爍標記(無覆蓋圖時)
+    if(seasonNoOverlay && (isZone(c.t)&&c.lvl>0 || (isBigB(c.t)&&c.ax===x&&c.ay===y)) && !c.pow
+       && c.t!==T.COAL && c.t!==T.NUKE){
+      pCone(X, zoneH(c)+2.2, Z, 0.55, 1.1, 0xffe14d, Math.PI/4);
+    }
+  }
+  flushInst(boxMesh, boxN);
+  flushInst(coneMesh, coneN);
+  flushInst(cylMesh, cylN);
+  dirty=false;
+  rebuildGround();
+  refreshCars();
+}
+function zoneH(c){
+  if(c.t===T.RES) return c.lvl<=2?2.2:c.lvl<=4?4:9;
+  if(c.t===T.COM) return 2+c.lvl*2.2;
+  if(c.t===T.IND) return 3;
+  if(isBigB(c.t)) return 5;
+  return 2;
+}
+
+function drawRoadDeco(x,y,X,Z){
+  const c=G[x][y];
+  const h = inB(x+1,y)&&G[x+1][y].t===T.ROAD || inB(x-1,y)&&G[x-1][y].t===T.ROAD;
+  const v = inB(x,y+1)&&G[x][y+1].t===T.ROAD || inB(x,y-1)&&G[x][y-1].t===T.ROAD;
+  if(c.br){ // 橋面
+    pBox(X,0.05,Z,TILE,0.36,TILE,0x6a6f77);
+    pBox(X,0.42,Z, h&&!v?TILE:0.3, 0.5, v&&!h?TILE:0.3, 0x8b909a);
+    pCyl(X-1.2,-0.7,Z-1.2,0.2,1.6,0x565b63); pCyl(X+1.2,-0.7,Z+1.2,0.2,1.6,0x565b63);
+  }
+  if(h&&!v){ pBox(X,c.br?0.28:0.02,Z,1.3,0.05,0.16,0xd8c542); }
+  else if(v&&!h){ pBox(X,c.br?0.28:0.02,Z,0.16,0.05,1.3,0xd8c542); }
+}
+function drawRail(x,y,X,Z){
+  const c=G[x][y];
+  if(c.br){ pBox(X,0.02,Z,TILE,0.3,TILE,0x6a6f77); pCyl(X,-0.8,Z,0.24,1.6,0x565b63); }
+  const v = inB(x,y+1)&&G[x][y+1].t===T.RAIL || inB(x,y-1)&&G[x][y-1].t===T.RAIL;
+  const ry = v?0:Math.PI/2;
+  for(const o of [-1.2,-0.4,0.4,1.2]) pBox(X+(v?0:o),0.06,Z+(v?o:0),v?2:0.5,0.1,v?0.5:2,0x54462f,0);
+  pBox(X+(v?-0.7:0),0.14,Z+(v?0:-0.7),v?0.24:TILE*0.9,0.12,v?TILE*0.9:0.24,0x9aa3ad,0);
+  pBox(X+(v?0.7:0),0.14,Z+(v?0:0.7),v?0.24:TILE*0.9,0.12,v?TILE*0.9:0.24,0x9aa3ad,0);
+}
+function drawWire(x,y,X,Z,pow){
+  if(G[x][y].br) pBox(X,0.0,Z,1.2,0.3,1.2,0x8b909a);
+  pCyl(X,1.5,Z,0.11,3,0x7a6248);
+  const h = inB(x+1,y)&&condAt(x+1,y) || inB(x-1,y)&&condAt(x-1,y);
+  pBox(X,2.9,Z,h?0.2:2.1,0.16,h?2.1:0.2,0x7a6248);
+  pBox(X,3.12,Z,0.3,0.3,0.3,pow?0xffd23e:0x555c66);
+}
+function condAt(x,y){ const c=G[x][y]; return c.t===T.WIRE||c.wr||isZone(c.t)||isBigB(c.t); }
+
+function drawRes(c,X,Z){
+  if(c.lvl===0) return;
+  const wall=RESWALL[(c.v*4)|0], roof=ROOFCOL[(c.v*7|0)%4];
+  if(c.lvl<=2){                       // 小屋
+    pBox(X,0.9,Z,2.4,1.8,2.2,wall,0);
+    pCone(X,2.5,Z,2.0,1.4,roof,Math.PI/4);
+    if(c.lvl===2){ pBox(X+1.4,0.6,Z+1.2,0.9,1.2,0.9,wall); }
+  } else if(c.lvl<=4){                // 連棟宅
+    pBox(X-0.85,1.3,Z,1.7,2.6,2.6,wall,0);
+    pCone(X-0.85,3.2,Z,1.5,1.2,roof,Math.PI/4);
+    pBox(X+1.05,1.0,Z+0.3,1.6,2.0,2.0,RESWALL[((c.v*9)|0)%4],0);
+    pCone(X+1.05,2.6,Z+0.3,1.4,1.1,ROOFCOL[((c.v*5)|0)%4],Math.PI/4);
+  } else {                            // 公寓塔
+    pBox(X,4.4,Z,2.9,8.8,2.9,0xe3d5be,0);
+    pBox(X,9.0,Z,3.1,0.4,3.1,0x8f8577,0);
+    for(let f=0;f<4;f++) pBox(X,1.6+f*2,Z+1.5,2.5,0.5,0.14,0x5f7d8c);
+  }
+}
+function drawCom(c,X,Z){
+  if(c.lvl===0) return;
+  const h = 2 + c.lvl*2.1;
+  const glass=[0x6fa8c9,0x7fb3d6,0x5f93b5][(c.v*3)|0];
+  pBox(X,h/2,Z,2.9,h,2.9,glass,0);
+  pBox(X,h+0.18,Z,3.1,0.36,3.1,0x3f5666,0);
+  for(let f=0;f<c.lvl;f++){ pBox(X,1.2+f*2.1,Z,3.02,0.22,3.02,0xdfeeff,0); }
+  if(c.lvl>=3) pBox(X,h+0.9,Z,0.24,1.4,0.24,0x3f5666,0);
+  if(c.lvl>=1) pBox(X,0.9,Z+1.55,2.6,0.5,0.12,0xffb742,0); // 招牌
+}
+function drawInd(c,X,Z){
+  if(c.lvl===0) return;
+  const body=[0xb8b2a6,0xc9b98e,0xa9a49b][(c.v*3)|0];
+  pBox(X,1.4,Z,3.2,2.8,3.0,body,0);
+  pCone(X-0.8,3.2,Z,1.3,1.0,0x8a8478,Math.PI/4);
+  pCyl(X+1.1,3.6,Z+0.9,0.28,2.6,0x6e6a63);
+  if(c.lvl>=3){ pCyl(X+0.3,4.0,Z-0.9,0.3,3.4,0x5f5b55); pBox(X-1.0,3.4,Z+0.9,1.2,1.2,1.2,body,0); }
+  if(c.lvl>=5){ pBox(X,3.4,Z,2.0,1.4,1.8,0x97918a,0); }
+  pBox(X,0.35,Z-1.62,2.8,0.7,0.14,0x77706a,0); // 圍牆
+}
+
+function drawBig(c,x,y){
+  const w=BSPEC[c.t].w, cx=wx(x)+(w-1)*TILE/2, cz=wz(y)+(w-1)*TILE/2, W=w*TILE;
+  pBox(cx,0.12,cz,W*0.98,0.24,W*0.98,0xb7bcc4);   // 基座
+  switch(c.t){
+    case T.POLICE:
+      pBox(cx,1.6,cz,W*0.7,3.2,W*0.62,0x5f83b8,0);
+      pBox(cx,3.4,cz,W*0.74,0.4,W*0.66,0x33465f,0);
+      pBox(cx,3.9,cz,1.2,0.7,0.5,0x2e77d0,0); pBox(cx,4.5,cz,0.16,0.6,0.16,0x33465f,0);
+      break;
+    case T.FIRESTA:
+      pBox(cx,1.5,cz,W*0.72,3.0,W*0.64,0xc65a4d,0);
+      pBox(cx,3.2,cz,W*0.76,0.4,W*0.68,0x6e2e28,0);
+      pBox(cx-W*0.18,1.2,cz+W*0.28,2.0,2.4,0.2,0x8a3b34,0); // 車庫門
+      pCyl(cx+W*0.24,4.0,cz-W*0.2,0.2,2.2,0x6e2e28);
+      break;
+    case T.COAL:
+      pBox(cx,2.2,cz,W*0.8,4.4,W*0.66,0x6a6f78,0);
+      pCyl(cx-W*0.2,6.2,cz,0.75,6.0,0x565b64);
+      pCyl(cx+W*0.16,5.6,cz+0.6,0.65,5.0,0x60656e);
+      pBox(cx+W*0.3,1.2,cz-W*0.28,2.2,2.4,2.2,0x3b3f46,0); // 煤堆
+      break;
+    case T.NUKE:
+      pBox(cx-W*0.2,1.8,cz,W*0.44,3.6,W*0.5,0xe8e6df,0);
+      pCyl(cx+W*0.22,3.4,cz,2.3,6.8,0xd9d7cf);
+      pCyl(cx+W*0.22,7.0,cz,1.7,0.7,0xc4c2ba);
+      pBox(cx-W*0.2,3.9,cz,1.1,0.8,1.1,0xf2c23e,0);   // 警示標
+      break;
+    case T.STADIUM:{
+      pBox(cx,0.5,cz,W*0.62,0.7,W*0.42,0x63a35c,0);   // 草皮
+      pBox(cx,1.5,cz-W*0.31,W*0.86,2.6,W*0.14,0xcfd4da,0);
+      pBox(cx,1.5,cz+W*0.31,W*0.86,2.6,W*0.14,0xcfd4da,0);
+      pBox(cx-W*0.4,1.3,cz,W*0.12,2.2,W*0.6,0xbfc4cb,0);
+      pBox(cx+W*0.4,1.3,cz,W*0.12,2.2,W*0.6,0xbfc4cb,0);
+      for(const s of [-1,1]) pCyl(cx+s*W*0.3,3.8,cz-W*0.3,0.12,3.4,0x8a9099);
+      break;}
+    case T.PORT:
+      pBox(cx,0.9,cz,W*0.8,1.8,W*0.5,0x9c8a6f,0);      // 倉庫
+      pCone(cx,2.2,cz,W*0.34,1.0,0x7d6f59,Math.PI/4);
+      pCyl(cx+W*0.3,3.2,cz+W*0.3,0.18,5.0,0xc7873f);   // 起重機柱
+      pBox(cx+W*0.3,5.4,cz+W*0.15,0.3,0.3,3.4,0xc7873f,0);
+      pBox(cx-W*0.28,0.7,cz+W*0.3,2.6,1.4,1.4,0xb5473d,0); // 貨櫃
+      pBox(cx-W*0.28,2.0,cz+W*0.3,2.6,1.2,1.4,0x3f7fbf,0);
+      break;
+    case T.AIRPORT:{
+      pBox(cx,0.3,cz+W*0.22,W*0.94,0.3,W*0.3,0x565b63,0);   // 跑道
+      for(let s=0;s<5;s++) pBox(cx-W*0.36+s*W*0.18,0.5,cz+W*0.22,1.6,0.06,0.24,0xf0f0e8,0);
+      pBox(cx-W*0.24,1.4,cz-W*0.18,W*0.4,2.8,W*0.26,0xd7dbe0,0); // 航廈
+      pCyl(cx+W*0.26,2.8,cz-W*0.2,0.5,5.2,0xaeb4bc);           // 塔台
+      pBox(cx+W*0.26,5.7,cz-W*0.2,1.7,0.9,1.7,0x6fa8c9,0);
+      // 停機小飛機
+      pBox(cx+W*0.05,0.9,cz+W*0.02,3.0,0.5,0.6,0xeef1f4,0);
+      pBox(cx+W*0.05,0.95,cz+W*0.02,0.7,0.4,2.6,0xeef1f4,0);
+      pBox(cx+W*0.05+1.3,1.3,cz+W*0.02,0.5,0.9,0.16,0xc65a4d,0);
+      break;}
+  }
+}
+
+/* ── 車流 ── */
+let cars=[], roadList=[];
+function refreshCars(){
+  roadList=[];
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++) if(G[x][y].t===T.ROAD) roadList.push([x,y]);
+  const want = Math.min(CAR_CAP, Math.floor(roadList.length/2.4));
+  while(cars.length>want) cars.pop();
+  while(cars.length<want && roadList.length){
+    const [x,y]=roadList[Math.floor(Math.random()*roadList.length)];
+    cars.push({x,y,px:wx(x),pz:wz(y),tx:x,ty:y,prog:1,
+      col:[0xd94f3d,0x3d7fd9,0xe8c14a,0xdfe4ea,0x54c47a][Math.floor(Math.random()*5)]});
+  }
+}
+function stepCars(dt){
+  let n=0;
+  for(const car of cars){
+    car.prog += dt*1.7;
+    if(car.prog>=1){
+      car.x=car.tx; car.y=car.ty; car.prog=0;
+      const opts=[];
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const nx=car.x+dx, ny=car.y+dy;
+        if(inB(nx,ny)&&G[nx][ny].t===T.ROAD) opts.push([nx,ny]);
+      }
+      if(!opts.length){ car.prog=1; continue; }
+      const pick=opts[Math.floor(Math.random()*opts.length)];
+      car.tx=pick[0]; car.ty=pick[1];
+    }
+    const fx=wx(car.x)+(wx(car.tx)-wx(car.x))*car.prog;
+    const fz=wz(car.y)+(wz(car.ty)-wz(car.y))*car.prog;
+    const dx=car.tx-car.x, dz=car.ty-car.y;
+    const ox = dz!==0 ? (dz>0?-0.85:0.85) : 0;
+    const oz = dx!==0 ? (dx>0?0.85:-0.85) : 0;
+    _d.position.set(fx+ox, 0.42, fz+oz);
+    _d.rotation.set(0, dx!==0 ? 0 : Math.PI/2, 0);
+    _d.scale.set(1,1,1); _d.updateMatrix();
+    carMesh.setMatrixAt(n,_d.matrix); wCol(carMesh,n,car.col); n++;
+  }
+  flushInst(carMesh, n);
+}
+
+/* ═══════════ 攝影機與輸入 ═══════════ */
+let mode='bird';                       // bird | walk
+const bird = {tx:0, tz:0, yaw:Math.PI*0.25, pitch:0.9, dist:150};
+const walk = {x:0, z:0, yaw:0, pitch:0, speed:9};
+let curTool='query';
+let cursor=null;                        // 施工游標
+const keys={};
+
+function initCameras(){
+  cursor = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE,0.5,TILE),
+    new THREE.MeshBasicMaterial({color:0xffb742, transparent:true, opacity:0.45}));
+  cursor.visible=false; scene.add(cursor);
+  walk.x=0; walk.z=0;
+  updateBirdCam();
+}
+
+function updateBirdCam(){
+  const b=bird;
+  b.pitch=clamp(b.pitch,0.32,1.45); b.dist=clamp(b.dist,26,330);
+  const lim=HALF+30;
+  b.tx=clamp(b.tx,-lim,lim); b.tz=clamp(b.tz,-lim,lim);
+  const cx=b.tx + Math.cos(b.yaw)*Math.cos(b.pitch)*b.dist;
+  const cz=b.tz + Math.sin(b.yaw)*Math.cos(b.pitch)*b.dist;
+  const cy=Math.sin(b.pitch)*b.dist;
+  camBird.position.set(cx,cy,cz);
+  camBird.lookAt(b.tx,0,b.tz);
+}
+function updateWalkCam(){
+  walk.pitch=clamp(walk.pitch,-1.2,1.2);
+  camWalk.position.set(walk.x, 2.3, walk.z);
+  const lx=walk.x+Math.cos(walk.yaw)*Math.cos(walk.pitch);
+  const lz=walk.z+Math.sin(walk.yaw)*Math.cos(walk.pitch);
+  camWalk.lookAt(lx, 2.3+Math.sin(walk.pitch), lz);
+}
+
+/* 世界座標 → 地格 */
+function pickTile(clientX, clientY){
+  const cam=activeCam;
+  const ndc=new THREE.Vector2((clientX/innerWidth)*2-1, -(clientY/innerHeight)*2+1);
+  const ray=new THREE.Raycaster();
+  ray.setFromCamera(ndc, cam);
+  const o=ray.ray.origin, d=ray.ray.direction;
+  if(Math.abs(d.y)<1e-5) return null;
+  const t=-o.y/d.y;
+  if(t<0) return null;
+  const px=o.x+d.x*t, pz=o.z+d.z*t;
+  const x=Math.floor((px+HALF)/TILE), y=Math.floor((pz+HALF)/TILE);
+  if(!inB(x,y)) return null;
+  return [x,y];
+}
+
+/* 可通行判定(街景) */
+function walkable(px,pz){
+  const x=Math.floor((px+HALF)/TILE), y=Math.floor((pz+HALF)/TILE);
+  if(!inB(x,y)) return false;
+  const t=G[x][y].t;
+  return t===T.GRASS||t===T.ROAD||t===T.RAIL||t===T.PARK||t===T.TREE||t===T.RUBBLE||
+         (isZone(t)&&G[x][y].lvl===0);
+}
+
+/* ── 指標事件 ── */
+let ptr={down:false, id:-1, sx:0, sy:0, lx:0, ly:0, mode:'', moved:false};
+let pinch=null;
+let lookPtr={id:-1, lx:0, ly:0};
+
+function initInput(){
+  const cv=renderer.domElement;
+
+  cv.addEventListener('pointerdown', e=>{
+    audioKick();
+    if(mode==='walk'){
+      // 觸控:左下搖桿另外處理;此處負責環顧
+      if(e.pointerType==='touch' && e.clientX<innerWidth*0.42 && e.clientY>innerHeight*0.45) return;
+      lookPtr.id=e.pointerId; lookPtr.lx=e.clientX; lookPtr.ly=e.clientY;
+      cv.setPointerCapture(e.pointerId);
+      return;
+    }
+    if(pinchStart(e)) return;
+    ptr.down=true; ptr.id=e.pointerId; ptr.moved=false;
+    ptr.sx=ptr.lx=e.clientX; ptr.sy=ptr.ly=e.clientY;
+    ptr.mode = (e.button===2||e.ctrlKey) ? 'rotate' : (curTool==='query'?'pan':'paint');
+    cv.setPointerCapture(e.pointerId);
+    if(ptr.mode==='paint') paintAt(e.clientX,e.clientY);
+  });
+
+  cv.addEventListener('pointermove', e=>{
+    if(mode==='walk'){
+      if(e.pointerId===lookPtr.id){
+        walk.yaw   += (e.clientX-lookPtr.lx)*0.0042;
+        walk.pitch -= (e.clientY-lookPtr.ly)*0.0035;
+        lookPtr.lx=e.clientX; lookPtr.ly=e.clientY;
+      }
+      return;
+    }
+    if(pinchMove(e)) return;
+    // 游標預覽
+    if(!ptr.down && curTool!=='query'){
+      const p=pickTile(e.clientX,e.clientY);
+      if(p){ showCursor(p[0],p[1]); } else cursor.visible=false;
+    }
+    if(!ptr.down || e.pointerId!==ptr.id) return;
+    const dx=e.clientX-ptr.lx, dy=e.clientY-ptr.ly;
+    if(Math.abs(e.clientX-ptr.sx)+Math.abs(e.clientY-ptr.sy)>6) ptr.moved=true;
+    if(ptr.mode==='pan'){
+      const s=bird.dist*0.0016;
+      const fx=Math.cos(bird.yaw), fz=Math.sin(bird.yaw);
+      const rx=-fz, rz=fx;
+      bird.tx += (rx*dx + fx*dy)*s;
+      bird.tz += (rz*dx + fz*dy)*s;
+      updateBirdCam();
+    } else if(ptr.mode==='rotate'){
+      bird.yaw   += dx*0.0055;
+      bird.pitch += dy*0.004;
+      updateBirdCam();
+    } else if(ptr.mode==='paint'){
+      paintAt(e.clientX,e.clientY);
+    }
+    ptr.lx=e.clientX; ptr.ly=e.clientY;
+  });
+
+  const up = e=>{
+    if(mode==='walk'){ if(e.pointerId===lookPtr.id) lookPtr.id=-1; return; }
+    pinchEnd(e);
+    if(e.pointerId!==ptr.id) return;
+    if(curTool==='query' && !ptr.moved){
+      const p=pickTile(e.clientX,e.clientY);
+      if(p) showQuery(p[0],p[1],e.clientX,e.clientY);
+    }
+    ptr.down=false; ptr.id=-1;
+  };
+  cv.addEventListener('pointerup', up);
+  cv.addEventListener('pointercancel', up);
+  cv.addEventListener('contextmenu', e=>e.preventDefault());
+
+  cv.addEventListener('wheel', e=>{
+    e.preventDefault();
+    if(mode!=='bird') return;
+    bird.dist *= (1 + Math.sign(e.deltaY)*0.09);
+    updateBirdCam();
+  }, {passive:false});
+
+  window.addEventListener('keydown', e=>{
+    keys[e.code]=true;
+    if(e.code==='KeyV') toggleView();
+  });
+  window.addEventListener('keyup', e=>{ keys[e.code]=false; });
+
+  initStick();
+}
+
+/* 雙指縮放/旋轉(鳥瞰) */
+const touches=new Map();
+function pinchStart(e){
+  if(e.pointerType!=='touch') return false;
+  touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(touches.size===2){
+    const [a,b]=[...touches.values()];
+    pinch={d:Math.hypot(a.x-b.x,a.y-b.y), cy:(a.y+b.y)/2};
+    ptr.down=false;
+    return true;
+  }
+  return false;
+}
+function pinchMove(e){
+  if(!touches.has(e.pointerId)) return false;
+  touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pinch && touches.size===2){
+    const [a,b]=[...touches.values()];
+    const d=Math.hypot(a.x-b.x,a.y-b.y);
+    bird.dist *= pinch.d/d;
+    const cy=(a.y+b.y)/2;
+    bird.pitch += (cy-pinch.cy)*0.004;
+    pinch={d, cy};
+    updateBirdCam();
+    return true;
+  }
+  return false;
+}
+function pinchEnd(e){ touches.delete(e.pointerId); if(touches.size<2) pinch=null; }
+
+/* 施工 */
+let lastPaint=null;
+function paintAt(cx,cy){
+  const p=pickTile(cx,cy);
+  if(!p) return;
+  const [x,y]=p;
+  if(lastPaint && lastPaint[0]===x && lastPaint[1]===y) return;
+  lastPaint=[x,y];
+  showCursor(x,y);
+  place(curTool,x,y);
+}
+function showCursor(x,y){
+  const tl=TOOLS.find(o=>o.id===curTool);
+  const w = tl&&tl.t!==undefined&&isBigB(tl.t) ? BSPEC[tl.t].w : 1;
+  cursor.visible=true;
+  cursor.scale.set(w,1,w);
+  cursor.position.set(wx(x)+(w-1)*TILE/2, 0.3, wz(y)+(w-1)*TILE/2);
+  let ok=true;
+  if(curTool!=='doze'&&curTool!=='query'){
+    const t=tl&&tl.t, isTrans=t===T.ROAD||t===T.RAIL||t===T.WIRE;
+    for(let i=0;i<w;i++)for(let j=0;j<w;j++){
+      if(!inB(x+i,y+j)){ ok=false; continue; }
+      const cc=G[x+i][y+j];
+      const legal = buildable(cc) || (isTrans && cc.t===T.WATER) ||
+        (t===T.WIRE && (cc.t===T.ROAD||cc.t===T.RAIL) && !cc.br && !cc.wr) ||
+        ((t===T.ROAD||t===T.RAIL) && cc.t===T.WIRE && !cc.br);
+      if(!legal) ok=false;
+    }
+  }
+  cursor.material.color.set(ok?0xffb742:0xe05d5d);
+}
+
+/* 街景移動(每幀) */
+let stickVec={x:0,y:0};
+function stepWalk(dt){
+  let mx=0, mz=0;
+  if(keys.KeyW||keys.ArrowUp) mz+=1;
+  if(keys.KeyS||keys.ArrowDown) mz-=1;
+  if(keys.KeyA||keys.ArrowLeft) mx-=1;
+  if(keys.KeyD||keys.ArrowRight) mx+=1;
+  mx+=stickVec.x; mz-=stickVec.y;
+  const len=Math.hypot(mx,mz);
+  if(len>0.01){
+    mx/=Math.max(1,len); mz/=Math.max(1,len);
+    const sp=walk.speed * ((keys.ShiftLeft||keys.ShiftRight)?2:1);
+    const fx=Math.cos(walk.yaw), fz=Math.sin(walk.yaw);
+    const rx=-fz, rz=fx;
+    let nx=walk.x + (fx*mz + rx*mx)*sp*dt;
+    let nz=walk.z + (fz*mz + rz*mx)*sp*dt;
+    nx=clamp(nx,-HALF+1,HALF-1); nz=clamp(nz,-HALF+1,HALF-1);
+    if(walkable(nx,walk.z)) walk.x=nx;
+    if(walkable(walk.x,nz)) walk.z=nz;
+  }
+  updateWalkCam();
+}
+
+/* 虛擬搖桿 */
+function initStick(){
+  const el=document.getElementById('stick'), knob=document.getElementById('stickKnob');
+  let sid=-1, cx=0, cyy=0;
+  el.addEventListener('pointerdown', e=>{
+    sid=e.pointerId; const r=el.getBoundingClientRect();
+    cx=r.left+r.width/2; cyy=r.top+r.height/2;
+    el.setPointerCapture(sid); move(e);
+  });
+  const move=e=>{
+    if(e.pointerId!==sid) return;
+    let dx=e.clientX-cx, dy=e.clientY-cyy;
+    const m=Math.hypot(dx,dy), R=42;
+    if(m>R){dx*=R/m; dy*=R/m;}
+    knob.style.transform=`translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+    stickVec.x=dx/R; stickVec.y=dy/R;
+  };
+  el.addEventListener('pointermove', move);
+  const end=e=>{
+    if(e.pointerId!==sid) return;
+    sid=-1; stickVec.x=0; stickVec.y=0;
+    knob.style.transform='translate(-50%,-50%)';
+  };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+}
+
+/* 視角切換 */
+function toggleView(){
+  if(mode==='bird'){
+    mode='walk';
+    // 站到鳥瞰目標附近的可走位置
+    let bx=clamp(bird.tx,-HALF+2,HALF-2), bz=clamp(bird.tz,-HALF+2,HALF-2);
+    outer:
+    for(let r=0;r<N;r++){
+      for(let a=0;a<16;a++){
+        const px=bx+Math.cos(a/16*6.283)*r*TILE, pz=bz+Math.sin(a/16*6.283)*r*TILE;
+        if(px>-HALF&&px<HALF&&pz>-HALF&&pz<HALF&&walkable(px,pz)){ bx=px; bz=pz; break outer; }
+      }
+    }
+    walk.x=bx; walk.z=bz; walk.yaw=bird.yaw+Math.PI; walk.pitch=0;
+    activeCam=camWalk;
+    document.getElementById('viewBtn').textContent='🦅 返回鳥瞰';
+    document.getElementById('toolbar').style.display='none';
+    document.getElementById('camBtns').style.display='none';
+    document.getElementById('walkHint').style.display='block';
+    if(isTouch) document.getElementById('stick').style.display='block';
+    cursor.visible=false; hideQuery();
+    setTimeout(()=>{document.getElementById('walkHint').style.display='none';}, 5200);
+    toast('已進入街景。城市持續運轉中——按 V 或按鈕返回鳥瞰。');
+  } else {
+    mode='bird';
+    bird.tx=walk.x; bird.tz=walk.z;
+    activeCam=camBird;
+    updateBirdCam();
+    document.getElementById('viewBtn').textContent='🚶 走進城市';
+    document.getElementById('toolbar').style.display='flex';
+    document.getElementById('camBtns').style.display='flex';
+    document.getElementById('walkHint').style.display='none';
+    document.getElementById('stick').style.display='none';
+  }
+}
+const isTouch = matchMedia('(pointer:coarse)').matches;
+
+/* ═══════════ UI、音效與主迴圈 ═══════════ */
+const $ = s=>document.querySelector(s);
+
+/* 工具列 */
+function buildToolbar(){
+  const bar=$('#toolbar');
+  bar.innerHTML='';
+  for(const tl of TOOLS){
+    if(tl.grp){ const d=document.createElement('div'); d.className='toolgroup'; d.textContent=tl.grp; bar.appendChild(d); continue; }
+    const b=document.createElement('button');
+    b.className='tool'+(tl.id===curTool?' sel':'');
+    b.dataset.id=tl.id;
+    b.innerHTML=`<span class="ic">${tl.ic}</span><span class="nm">${tl.nm}</span><span class="pr">${tl.pr?'$'+tl.pr:'免費'}</span>`;
+    b.addEventListener('click', ()=>{
+      curTool=tl.id;
+      document.querySelectorAll('.tool').forEach(el=>el.classList.toggle('sel',el.dataset.id===tl.id));
+      hideQuery();
+      lastPaint=null;
+    });
+    bar.appendChild(b);
+  }
+}
+
+/* HUD 更新 */
+function updateHUD(){
+  $('#vFunds').textContent = '$'+city.funds.toLocaleString();
+  $('#vFunds').style.color = city.funds<0 ? 'var(--bad)' : 'var(--amber2)';
+  $('#vPop').textContent = city.pop.toLocaleString();
+  $('#vDate').textContent = `${city.year}年 ${city.month+1}月`;
+  $('#vName').textContent = `${city.name}・${city.title}`;
+  setBar('#barR',city.demR); setBar('#barC',city.demC); setBar('#barI',city.demI);
+}
+function setBar(sel,v){
+  const el=$(sel);
+  const h=Math.abs(v)*50;
+  el.style.height=h+'%';
+  if(v>=0){ el.style.bottom='50%'; el.style.top='auto'; }
+  else { el.style.top='50%'; el.style.bottom='auto'; }
+}
+
+/* 訊息帶 */
+let toastQ=[];
+function toast(msg){
+  toastQ.push(msg);
+  if(toastQ.length>4) toastQ.shift();
+  $('#tickerText').textContent=toastQ[toastQ.length-1];
+}
+
+/* 查詢泡泡 */
+function showQuery(x,y,px,py){
+  const c=G[x][y], i=idx(x,y), q=$('#query');
+  const rows=[];
+  rows.push(`<div class="qt">${TNAME[c.t]}${c.wr?'+電線':''}${isZone(c.t)?` Lv.${c.lvl}`:''}</div>`);
+  rows.push(`<span class="dim">座標</span> (${x}, ${y})`);
+  if(isZone(c.t)||isBigB(c.t)||c.t===T.WIRE||c.wr)
+    rows.push(`<span class="dim">電力</span> ${c.pow?'✅ 供電中':'❌ 未供電'}`);
+  rows.push(`<span class="dim">地價</span> ${Math.round(city.landv[i])}`);
+  rows.push(`<span class="dim">污染</span> ${Math.round(city.pollution[i])}`);
+  rows.push(`<span class="dim">犯罪</span> ${Math.round(city.crime[i])}`);
+  rows.push(`<span class="dim">交通</span> ${Math.round(city.traffic[i])}`);
+  q.innerHTML=rows.join('<br>');
+  q.style.display='block';
+  const w=q.offsetWidth, h=q.offsetHeight;
+  q.style.left=Math.min(innerWidth-w-8, px+14)+'px';
+  q.style.top=Math.min(innerHeight-h-40, py+10)+'px';
+  clearTimeout(q._t);
+  q._t=setTimeout(hideQuery, 4200);
+}
+function hideQuery(){ $('#query').style.display='none'; }
+
+/* ── 彈窗骨架 ── */
+function openModal(html){
+  let m=$('#modal');
+  if(!m){
+    m=document.createElement('div'); m.id='modal'; m.className='modal';
+    m.addEventListener('click', e=>{ if(e.target===m) closeModal(); });
+    document.body.appendChild(m);
+  }
+  m.innerHTML=`<div class="mbox">${html}</div>`;
+  m.classList.add('show');
+  return m;
+}
+function closeModal(){ const m=$('#modal'); if(m) m.classList.remove('show'); }
+
+/* 預算 */
+function openBudget(){
+  const m=openModal(`
+    <h2>市政預算</h2><div class="sub">${city.year} 年度 ・ 月結制</div>
+    <div class="row"><span>稅率</span><b id="taxV">${city.tax}%</b></div>
+    <input type="range" min="0" max="20" value="${city.tax}" id="taxSl">
+    <div class="slrow"><div class="sl-top"><span>🛣 交通維護(道路 ${city.roadCount||0}・鐵路 ${city.railCount||0})</span><b id="rdV">${Math.round(city.fundRoad*100)}%</b></div>
+      <input type="range" min="0" max="100" value="${Math.round(city.fundRoad*100)}" id="rdSl"></div>
+    <div class="slrow"><div class="sl-top"><span>🚓 警察撥款(${city.policeCount||0} 間)</span><b id="pcV">${Math.round(city.fundPolice*100)}%</b></div>
+      <input type="range" min="0" max="100" value="${Math.round(city.fundPolice*100)}" id="pcSl"></div>
+    <div class="slrow"><div class="sl-top"><span>🚒 消防撥款(${city.fireCount||0} 間)</span><b id="frV">${Math.round(city.fundFire*100)}%</b></div>
+      <input type="range" min="0" max="100" value="${Math.round(city.fundFire*100)}" id="frSl"></div>
+    <div class="row"><span>每月稅收</span><b class="pos">+$${city.lastIncome.toLocaleString()}</b></div>
+    <div class="row"><span>每月支出</span><b class="neg">−$${city.lastExpense.toLocaleString()}</b></div>
+    <div class="row"><span>每月結餘</span><b>${city.lastIncome-city.lastExpense>=0?'+':''}$${(city.lastIncome-city.lastExpense).toLocaleString()}</b></div>
+    <button class="bigbtn" id="mOk">核定預算</button>`);
+  $('#taxSl').oninput=e=>{ city.tax=+e.target.value; $('#taxV').textContent=city.tax+'%'; };
+  $('#rdSl').oninput=e=>{ city.fundRoad=e.target.value/100; $('#rdV').textContent=e.target.value+'%'; };
+  $('#pcSl').oninput=e=>{ city.fundPolice=e.target.value/100; $('#pcV').textContent=e.target.value+'%'; };
+  $('#frSl').oninput=e=>{ city.fundFire=e.target.value/100; $('#frV').textContent=e.target.value+'%'; };
+  $('#mOk').onclick=()=>{ closeModal(); computeStats(); groundDirty=true; toast('預算已核定。'); };
+}
+
+/* 圖層 */
+const OVERLAYS=[['none','🏙 一般檢視'],['power','⚡ 電力網'],['pollution','🏭 污染'],
+  ['crime','🚨 犯罪'],['landv','💰 地價'],['traffic','🚗 交通']];
+function openMaps(){
+  const m=openModal(`<h2>城市圖層</h2><div class="sub">以顏色檢視全市統計</div>
+    <div class="dlist">${OVERLAYS.map(([k,n])=>`<button data-k="${k}">${n}<span>${overlay===k?'●':''}</span></button>`).join('')}</div>`);
+  m.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{
+    overlay=b.dataset.k; groundDirty=true; closeModal();
+    const lg=$('#legend');
+    if(overlay==='none'){ lg.style.display='none'; }
+    else {
+      const name=OVERLAYS.find(o=>o[0]===overlay)[1];
+      lg.innerHTML=`<b>${name}</b><br>${overlay==='power'?'綠=供電 紅=停電':overlay==='landv'?'亮藍=高價值':'綠=低 紅=高'}`;
+      lg.style.display='block';
+    }
+  });
+}
+
+/* 災難 */
+function openDisasters(){
+  const m=openModal(`<h2>災難控制中心</h2><div class="sub">手動觸發,或切換隨機災難</div>
+    <div class="dlist">
+      <button data-d="fire">🔥 火災</button>
+      <button data-d="flood">🌊 洪水</button>
+      <button data-d="tornado">🌪 龍捲風</button>
+      <button data-d="quake">🫨 地震</button>
+      <button data-d="monster">🦖 巨獸來襲</button>
+      <button data-d="crash">✈️ 空難</button>
+      <button data-d="auto">🎲 隨機災難:<span>${city.autoDisaster?'開啟':'關閉'}</span></button>
+    </div>`);
+  m.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{
+    const k=b.dataset.d;
+    if(k==='auto'){ city.autoDisaster=!city.autoDisaster; toast(`隨機災難已${city.autoDisaster?'開啟':'關閉'}。`); }
+    else triggerDisaster(k,false);
+    closeModal();
+  });
+}
+
+/* 新城市 */
+function openNewCity(first){
+  let diff=20000;
+  const m=openModal(`
+    <h2>${first?'🏗 建立你的城市':'🆕 開拓新城市'}</h2>
+    <div class="sub">完整復刻初代模擬城市 ・ 立體成像 ・ 雙視角</div>
+    <div style="font-size:12px;color:var(--dim);margin-bottom:2px">城市名稱</div>
+    <input id="nameInput" maxlength="12" value="${first?'新市鎮':(city?city.name:'新市鎮')}">
+    <div style="font-size:12px;color:var(--dim)">難度(起始資金)</div>
+    <div class="choice">
+      <button data-f="20000" class="on">簡單<br>$20,000</button>
+      <button data-f="10000">普通<br>$10,000</button>
+      <button data-f="5000">困難<br>$5,000</button>
+    </div>
+    <button class="bigbtn" id="goBtn">產生地形,開始建設</button>
+    ${first?'':'<button class="bigbtn ghost" id="cancelBtn" style="margin-top:8px">取消</button>'}
+    <div style="font-size:11.5px;color:var(--dim);margin-top:14px;line-height:1.8">
+      玩法:先蓋 <b style="color:var(--amber2)">電廠</b> → 拉 <b style="color:var(--amber2)">電線</b> 到分區
+      → 劃 <b style="color:var(--res)">住宅</b>/<b style="color:var(--com)">商業</b>/<b style="color:var(--ind)">工業</b>區並鋪路。
+      隨時按「🚶 走進城市」用第一人稱漫步街頭。</div>`);
+  m.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{
+    diff=+b.dataset.f;
+    m.querySelectorAll('[data-f]').forEach(x=>x.classList.toggle('on',x===b));
+  });
+  $('#goBtn').onclick=()=>{
+    const nm=($('#nameInput').value.trim()||'新市鎮');
+    newCity(nm, diff);
+    tornadoE=null; monsterE=null; cars=[];
+    overlay='none'; $('#legend').style.display='none';
+    if(mode==='walk') toggleView();
+    bird.tx=0; bird.tz=0; bird.dist=150; updateBirdCam();
+    dirty=true; updateHUD(); closeModal();
+    toast(`「${nm}」奠基於 1900 年。祝施政順利,市長!`);
+  };
+  const cb=$('#cancelBtn'); if(cb) cb.onclick=closeModal;
+}
+
+/* ── 音效(WebAudio 極簡合成) ── */
+let AC=null, muted=false;
+function audioKick(){ if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } }
+function sfx(kind){
+  if(muted||!AC) return;
+  const t=AC.currentTime;
+  const o=AC.createOscillator(), g=AC.createGain();
+  o.connect(g); g.connect(AC.destination);
+  if(kind==='build'){ o.type='square'; o.frequency.setValueAtTime(660,t); o.frequency.exponentialRampToValueAtTime(990,t+0.07);
+    g.gain.setValueAtTime(0.045,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.12); o.start(t); o.stop(t+0.13); }
+  else if(kind==='doze'){ o.type='sawtooth'; o.frequency.setValueAtTime(150,t); o.frequency.exponentialRampToValueAtTime(60,t+0.16);
+    g.gain.setValueAtTime(0.06,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.18); o.start(t); o.stop(t+0.2); }
+  else if(kind==='cash'){ o.type='triangle'; o.frequency.setValueAtTime(784,t); o.frequency.setValueAtTime(1175,t+0.09);
+    g.gain.setValueAtTime(0.05,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.3); o.start(t); o.stop(t+0.32); }
+  else if(kind==='alarm'){ o.type='square'; o.frequency.setValueAtTime(520,t); o.frequency.setValueAtTime(392,t+0.14);
+    o.frequency.setValueAtTime(520,t+0.28); g.gain.setValueAtTime(0.05,t);
+    g.gain.exponentialRampToValueAtTime(0.001,t+0.5); o.start(t); o.stop(t+0.52); }
+  else if(kind==='deny'){ o.type='square'; o.frequency.setValueAtTime(180,t);
+    g.gain.setValueAtTime(0.05,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.1); o.start(t); o.stop(t+0.12); }
+}
+
+/* ── 速度與主迴圈 ── */
+let speed=1;
+const SPD_MS=[Infinity, 2400, 1100, 380];
+let simAcc=0, entAcc=0, lastT=0;
+
+function bindUI(){
+  document.querySelectorAll('[data-spd]').forEach(b=>b.onclick=()=>{
+    speed=+b.dataset.spd;
+    document.querySelectorAll('[data-spd]').forEach(x=>x.classList.toggle('on',+x.dataset.spd===speed));
+    toast(speed===0?'時間暫停。':'時間流速已調整。');
+  });
+  $('#viewBtn').onclick=toggleView;
+  $('#budgetBtn').onclick=openBudget;
+  $('#mapBtn').onclick=openMaps;
+  $('#disBtn').onclick=openDisasters;
+  $('#newBtn').onclick=()=>openNewCity(false);
+  $('#sndBtn').onclick=()=>{ muted=!muted; $('#sndBtn').textContent=muted?'🔇':'🔊'; audioKick(); };
+  // 鳥瞰視角鈕:按住連續作用
+  const hold=(id,fn)=>{
+    const el=$(id); let tm=null;
+    const start=e=>{ e.preventDefault(); fn(); tm=setInterval(fn,50); };
+    const stop=()=>{ if(tm){clearInterval(tm); tm=null;} };
+    el.addEventListener('pointerdown',start);
+    el.addEventListener('pointerup',stop);
+    el.addEventListener('pointercancel',stop);
+    el.addEventListener('pointerleave',stop);
+  };
+  hold('#rotL', ()=>{ if(mode==='bird'){ bird.yaw-=0.045; updateBirdCam(); } });
+  hold('#rotR', ()=>{ if(mode==='bird'){ bird.yaw+=0.045; updateBirdCam(); } });
+  hold('#zIn',  ()=>{ if(mode==='bird'){ bird.dist*=0.97; updateBirdCam(); } });
+  hold('#zOut', ()=>{ if(mode==='bird'){ bird.dist*=1.03; updateBirdCam(); } });
+}
+
+function loop(t){
+  requestAnimationFrame(loop);
+  const dt=Math.min(0.05,(t-lastT)/1000)||0.016;
+  lastT=t;
+
+  // 模擬節拍
+  if(speed>0){
+    simAcc += dt*1000;
+    const ms=SPD_MS[speed];
+    let guard=0;
+    while(simAcc>=ms && guard++<4){ simAcc-=ms; simMonth(); }
+    // 災難實體
+    entAcc+=dt;
+    if(entAcc>0.22){ entAcc=0; stepEntities(); }
+  }
+
+  if(dirty) rebuildCity();
+  else if(groundDirty) rebuildGround();
+
+  stepCars(speed===0?0:dt*(speed===3?1.6:1));
+
+  // 災難實體動畫
+  if(tornadoE){
+    tornadoMesh.visible=true;
+    tornadoMesh.position.set(wx(Math.round(tornadoE.x)) + Math.sin(t*0.01)*1.2, 13, wz(Math.round(tornadoE.z)) + Math.cos(t*0.013)*1.2);
+    tornadoMesh.rotation.y = t*0.02;
+  } else tornadoMesh.visible=false;
+  if(monsterE){
+    monsterG.visible=true;
+    monsterG.position.set(wx(Math.round(monsterE.x)), Math.abs(Math.sin(t*0.008))*0.6, wz(Math.round(monsterE.z)));
+    monsterG.rotation.y = Math.atan2(monsterE.tx-monsterE.x, monsterE.tz-monsterE.z);
+  } else monsterG.visible=false;
+
+  // 地震震動
+  if(quake>0){
+    quake=Math.max(0,quake-dt*0.7);
+    activeCam.position.x += (Math.random()-0.5)*quake*2.2;
+    activeCam.position.y += (Math.random()-0.5)*quake*1.6;
+  }
+
+  if(mode==='walk') stepWalk(dt);
+  renderer.render(scene, activeCam);
+}
+
+/* ── 啟動 ── */
+function boot(){
+  initGL();
+  newCity('新市鎮', 20000);
+  initCameras();
+  initInput();
+  buildToolbar();
+  bindUI();
+  updateHUD();
+  rebuildCity();
+  requestAnimationFrame(loop);
+  openNewCity(true);
+}
+boot();
+
+</script>
+</body>
+</html>
