@@ -1,4 +1,6 @@
 # 立體模擬城市(SimCity 3D 網頁版)
+<img width="763" height="442" alt="image" src="https://github.com/user-attachments/assets/70bfe0ce-fd2d-4ce8-9949-fac7afa6314b" />
+<img width="890" height="494" alt="image" src="https://github.com/user-attachments/assets/a133ed2d-b066-4259-8440-a7c447b20a59" />
 
 ## 專案起源
 
