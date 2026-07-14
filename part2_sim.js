@@ -49,7 +49,7 @@ let city = null;              // 城市總狀態
 const idx = (x,y)=>x*N+y;
 const inB = (x,y)=>x>=0&&y>=0&&x<N&&y<N;
 
-function newCell(t){ return {t, lvl:0, pow:false, ax:-1, ay:-1, fire:0, br:false, wr:false, v:Math.random()}; }
+function newCell(t){ return {t, lvl:0, pow:false, ax:-1, ay:-1, fire:0, br:false, wr:false, rl:false, v:Math.random()}; }
 
 function newCity(name, funds){
   city = {
@@ -124,7 +124,7 @@ function place(tool, x, y){
   const isTrans = t===T.ROAD||t===T.RAIL||t===T.WIRE;
   // 電線與道路/鐵路交叉:不覆蓋原地格,以 wr 旗標疊加(橋面不可交叉)
   const c0 = G[x][y];
-  if(t===T.WIRE && (c0.t===T.ROAD||c0.t===T.RAIL) && !c0.br){
+  if(t===T.WIRE && (c0.t===T.ROAD||c0.t===T.RAIL) && !c0.br && !c0.rl){
     if(c0.wr) return false;
     if(city.funds < tl.pr){ toast('資金不足!'); sfx('deny'); return false; }
     city.funds -= tl.pr;
@@ -138,6 +138,14 @@ function place(tool, x, y){
     city.funds -= tl.pr;
     c0.t=t; c0.wr=true; c0.lvl=0; c0.fire=0; c0.ax=x; c0.ay=y;
     computePower();
+    sfx('build'); dirty=true; updateHUD();
+    return true;
+  }
+  // 平交道:道路⇄鐵路交叉,統一存為 t=ROAD + rl 旗標(橋面與電線交叉格不可)
+  if(((t===T.RAIL && c0.t===T.ROAD) || (t===T.ROAD && c0.t===T.RAIL)) && !c0.br && !c0.wr && !c0.rl){
+    if(city.funds < tl.pr){ toast('資金不足!'); sfx('deny'); return false; }
+    city.funds -= tl.pr;
+    c0.t=T.ROAD; c0.rl=true; c0.lvl=0; c0.fire=0; c0.ax=x; c0.ay=y;
     sfx('build'); dirty=true; updateHUD();
     return true;
   }
@@ -177,6 +185,13 @@ function doze(x,y){
     sfx('doze'); dirty=true; updateHUD();
     return true;
   }
+  if(c.rl){   // 平交道先拆鐵路,保留道路
+    if(city.funds < 1){ toast('資金不足!'); return false; }
+    city.funds -= 1;
+    c.rl=false;
+    sfx('doze'); dirty=true; updateHUD();
+    return true;
+  }
   if(c.t===T.GRASS||c.t===T.WATER) return false;
   let cells=[[x,y]];
   if(isBigB(c.t) && c.ax>=0){
@@ -193,7 +208,7 @@ function doze(x,y){
   for(const [cx,cy] of cells){
     const cc=G[cx][cy];
     cc.t = cc.br ? T.WATER : T.GRASS;
-    cc.br=false; cc.wr=false; cc.lvl=0; cc.fire=0; cc.ax=-1; cc.ay=-1;
+    cc.br=false; cc.wr=false; cc.rl=false; cc.lvl=0; cc.fire=0; cc.ax=-1; cc.ay=-1;
   }
   computePower();
   sfx('doze'); dirty=true; updateHUD();
@@ -350,7 +365,7 @@ function serializeCity(){
   const cells=[];
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
     const c=G[x][y];
-    cells.push([c.t, c.lvl, c.ax, c.ay, (c.br?1:0)|(c.wr?2:0), c.fire, +c.v.toFixed(3)]);
+    cells.push([c.t, c.lvl, c.ax, c.ay, (c.br?1:0)|(c.wr?2:0)|(c.rl?4:0), c.fire, +c.v.toFixed(3)]);
   }
   return {ver:SAVE_VER, savedAt:Date.now(), city:cobj, cells};
 }
@@ -375,7 +390,7 @@ function loadCity(s){
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
     const d=s.cells[i++], c=G[x][y];
     c.t=d[0]; c.lvl=d[1]; c.ax=d[2]; c.ay=d[3];
-    c.br=!!(d[4]&1); c.wr=!!(d[4]&2); c.fire=d[5]; c.v=d[6]; c.pow=false;
+    c.br=!!(d[4]&1); c.wr=!!(d[4]&2); c.rl=!!(d[4]&4); c.fire=d[5]; c.v=d[6]; c.pow=false;
   }
   computePower();
   computeStats();
@@ -450,7 +465,7 @@ function simMonth(){
       const c=G[x][y];
       if((c.t===T.ROAD||c.t===T.RAIL) && Math.random()<p){
         c.t = c.br?T.WATER:T.RUBBLE;
-        c.br=false; c.wr=false; c.lvl=0; c.ax=-1; c.ay=-1;
+        c.br=false; c.wr=false; c.rl=false; c.lvl=0; c.ax=-1; c.ay=-1;
         decayed++;
       }
     }
@@ -462,7 +477,7 @@ function simMonth(){
   let roads=0, rails=0, police=0, fire=0;
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
     const c=G[x][y];
-    if(c.t===T.ROAD)roads++; else if(c.t===T.RAIL)rails++;
+    if(c.t===T.ROAD){roads++; if(c.rl)rails++;} else if(c.t===T.RAIL)rails++;
     if(c.ax===x&&c.ay===y){ if(c.t===T.POLICE)police++; if(c.t===T.FIRESTA)fire++; }
   }
   const expense = (roads*0.18+rails*0.5)*city.fundRoad + police*24*city.fundPolice + fire*24*city.fundFire;
@@ -540,7 +555,7 @@ function triggerDisaster(kind, auto){
     let n=Math.min(45,cand.length);
     while(n-->0){
       const [x,y]=cand[Math.floor(Math.random()*cand.length)];
-      const c=G[x][y]; c.t=c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.lvl=0; c.ax=-1; c.ay=-1;
+      const c=G[x][y]; c.t=c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.rl=false; c.lvl=0; c.ax=-1; c.ay=-1;
     }
     toast('🌊 洪水氾濫!沿岸地區受災。');
   }
@@ -555,7 +570,7 @@ function triggerDisaster(kind, auto){
       const [x,y]=randTile(); const c=G[x][y];
       if(c.t===T.WATER||c.t===T.GRASS) continue;
       if(Math.random()<0.25 && flammable(c.t)) igniteCell(x,y);
-      else { if(isBigB(c.t)){c.ax=-1;c.ay=-1;} c.t=c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.lvl=0; }
+      else { if(isBigB(c.t)){c.ax=-1;c.ay=-1;} c.t=c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.rl=false; c.lvl=0; }
     }
     quake=1.4;
     toast('🫨 大地震!全市受創。');
@@ -594,7 +609,7 @@ function stepEntities(){
     const c=G[tx][tz];
     if(c.t!==T.WATER && c.t!==T.GRASS){
       if(isBigB(c.t)){c.ax=-1;c.ay=-1;}
-      c.t = c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.lvl=0; dirty=true;
+      c.t = c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.rl=false; c.lvl=0; dirty=true;
     }
     if(--e.life<=0){ tornadoE=null; toast('龍捲風消散了。'); }
   }
@@ -610,7 +625,7 @@ function stepEntities(){
       if(c.t!==T.WATER && c.t!==T.GRASS){
         if(isBigB(c.t)){c.ax=-1;c.ay=-1;}
         if(Math.random()<0.3 && flammable(c.t)) igniteCell(cx,cy);
-        else {c.t=c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.lvl=0;}
+        else {c.t=c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.rl=false; c.lvl=0;}
         dirty=true;
       }
     }

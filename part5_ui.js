@@ -50,7 +50,7 @@ function toast(msg){
 function showQuery(x,y,px,py){
   const c=G[x][y], i=idx(x,y), q=$('#query');
   const rows=[];
-  rows.push(`<div class="qt">${TNAME[c.t]}${c.wr?'+電線':''}${isZone(c.t)?` Lv.${c.lvl}`:''}</div>`);
+  rows.push(`<div class="qt">${TNAME[c.t]}${c.rl?'+鐵路(平交道)':''}${c.wr?'+電線':''}${isZone(c.t)?` Lv.${c.lvl}`:''}</div>`);
   rows.push(`<span class="dim">座標</span> (${x}, ${y})`);
   if(isZone(c.t)||isBigB(c.t)||c.t===T.WIRE||c.wr)
     rows.push(`<span class="dim">電力</span> ${c.pow?'✅ 供電中':'❌ 未供電'}`);
@@ -174,7 +174,7 @@ function openNewCity(first){
   $('#goBtn').onclick=()=>{
     const nm=($('#nameInput').value.trim()||'新市鎮');
     newCity(nm, diff);
-    tornadoE=null; monsterE=null; cars=[];
+    tornadoE=null; monsterE=null; cars=[]; trains=[];
     overlay='none'; $('#legend').style.display='none';
     if(mode==='walk') toggleView();
     bird.tx=0; bird.tz=0; bird.dist=150; updateBirdCam();
@@ -206,7 +206,7 @@ function openNewCity(first){
         }
         loadCity(s);
         saveCity();
-        tornadoE=null; monsterE=null; cars=[];
+        tornadoE=null; monsterE=null; cars=[]; trains=[];
         overlay='none'; $('#legend').style.display='none';
         if(mode==='walk') toggleView();
         bird.tx=0; bird.tz=0; bird.dist=150; updateBirdCam();

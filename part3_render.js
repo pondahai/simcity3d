@@ -215,7 +215,7 @@ function rebuildCity(){
         pCone(X,1.6,Z,1.15,2.3,vr<0.5?0x3e7c47:0x4f9152, vr*3);
         if(vr>0.72) pCone(X+1.1,1.1,Z-0.8,0.8,1.6,0x3a7343, vr*5);
         break;
-      case T.ROAD: drawRoadDeco(x,y,X,Z); break;
+      case T.ROAD: drawRoadDeco(x,y,X,Z); if(c.rl) drawRail(x,y,X,Z,true); break;
       case T.RAIL: drawRail(x,y,X,Z); break;
       case T.WIRE: drawWire(x,y,X,Z,c.pow); break;
       case T.RES: drawRes(c,X,Z); break;
@@ -276,14 +276,37 @@ function drawRoadDeco(x,y,X,Z){
   if(h&&!v){ pBox(X,c.br?0.28:0.02,Z,1.3,0.05,0.16,0xd8c542); }
   else if(v&&!h){ pBox(X,c.br?0.28:0.02,Z,0.16,0.05,1.3,0xd8c542); }
 }
-function drawRail(x,y,X,Z){
+function railAt(x,y){ const c=G[x][y]; return c.t===T.RAIL||c.rl; }
+const RAILC=0x9aa3ad, TIEC=0x54462f;
+function drawRail(x,y,X,Z,cross){
   const c=G[x][y];
-  if(c.br){ pBox(X,0.02,Z,TILE,0.3,TILE,0x6a6f77); pCyl(X,-0.8,Z,0.24,1.6,0x565b63); }
-  const v = inB(x,y+1)&&G[x][y+1].t===T.RAIL || inB(x,y-1)&&G[x][y-1].t===T.RAIL;
-  const ry = v?0:Math.PI/2;
-  for(const o of [-1.2,-0.4,0.4,1.2]) pBox(X+(v?0:o),0.06,Z+(v?o:0),v?2:0.5,0.1,v?0.5:2,0x54462f,0);
-  pBox(X+(v?-0.7:0),0.14,Z+(v?0:-0.7),v?0.24:TILE*0.9,0.12,v?TILE*0.9:0.24,0x9aa3ad,0);
-  pBox(X+(v?0.7:0),0.14,Z+(v?0:0.7),v?0.24:TILE*0.9,0.12,v?TILE*0.9:0.24,0x9aa3ad,0);
+  if(!cross && c.br){ pBox(X,0.02,Z,TILE,0.3,TILE,0x6a6f77); pCyl(X,-0.8,Z,0.24,1.6,0x565b63); }
+  const E=inB(x+1,y)&&railAt(x+1,y), W=inB(x-1,y)&&railAt(x-1,y);
+  const S=inB(x,y+1)&&railAt(x,y+1), Nb=inB(x,y-1)&&railAt(x,y-1);
+  const hC=E||W, vC=S||Nb;
+  if(!(hC&&vC)){
+    // 直線(或孤立):鋼軌貫通整格,與相鄰格無縫相接;枕木間距 0.8 跨格連續
+    const v=vC;
+    if(!cross) for(const o of [-1.6,-0.8,0,0.8,1.6]) pBox(X+(v?0:o),0.06,Z+(v?o:0),v?2:0.5,0.1,v?0.5:2,TIEC,0);
+    pBox(X+(v?-0.7:0),0.14,Z+(v?0:-0.7),v?0.24:TILE,0.12,v?TILE:0.24,RAILC,0);
+    pBox(X+(v?0.7:0),0.14,Z+(v?0:0.7),v?0.24:TILE,0.12,v?TILE:0.24,RAILC,0);
+  } else {
+    // 轉角/交會:朝每個連接方向畫半格臂,中心以道碴板銜接
+    if(!cross) pBox(X,0.05,Z,2.1,0.12,2.1,TIEC,0);
+    for(const [on,dx,dz] of [[E,1,0],[W,-1,0],[S,0,1],[Nb,0,-1]]){
+      if(!on) continue;
+      const a=dx!==0;                       // 臂沿 x 軸
+      const ax=X+dx*TILE/4, az=Z+dz*TILE/4;
+      if(!cross) for(const o of [0.8,1.6]) pBox(X+dx*o,0.06,Z+dz*o,a?0.5:2,0.1,a?2:0.5,TIEC,0);
+      pBox(ax+(a?0:-0.7),0.14,az+(a?-0.7:0),a?TILE/2:0.24,0.12,a?0.24:TILE/2,RAILC,0);
+      pBox(ax+(a?0:0.7),0.14,az+(a?0.7:0),a?TILE/2:0.24,0.12,a?0.24:TILE/2,RAILC,0);
+    }
+  }
+  if(cross){ // 平交道警示柱
+    pCyl(X+1.55,0.7,Z+1.55,0.07,1.4,0xe8e6df);
+    pBox(X+1.55,1.5,Z+1.55,0.55,0.16,0.16,0xd6453a,0);
+    pBox(X+1.55,1.5,Z+1.55,0.16,0.16,0.55,0xd6453a,0);
+  }
 }
 function drawWire(x,y,X,Z,pow){
   if(G[x][y].br) pBox(X,0.0,Z,1.2,0.3,1.2,0x8b909a);
@@ -395,9 +418,9 @@ let cars=[], roadList=[], trains=[], railList=[];
 function refreshCars(){
   roadList=[]; railList=[];
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
-    const t=G[x][y].t;
-    if(t===T.ROAD) roadList.push([x,y]);
-    else if(t===T.RAIL) railList.push([x,y]);
+    const c=G[x][y];
+    if(c.t===T.ROAD){ roadList.push([x,y]); if(c.rl) railList.push([x,y]); }
+    else if(c.t===T.RAIL) railList.push([x,y]);
   }
   const wantTrain = Math.min(10, Math.floor(railList.length/7));
   while(trains.length>wantTrain) trains.pop();
@@ -447,10 +470,10 @@ function stepCars(dt){
       const opts=[];
       for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
         const nx=tr.x+dx, ny=tr.y+dy;
-        if(inB(nx,ny)&&G[nx][ny].t===T.RAIL&&!(nx===px&&ny===py)) opts.push([nx,ny]);
+        if(inB(nx,ny)&&railAt(nx,ny)&&!(nx===px&&ny===py)) opts.push([nx,ny]);
       }
       if(!opts.length){
-        if(inB(px,py)&&G[px][py].t===T.RAIL&&!(px===tr.x&&py===tr.y)) opts.push([px,py]);
+        if(inB(px,py)&&railAt(px,py)&&!(px===tr.x&&py===tr.y)) opts.push([px,py]);
         else { tr.prog=1; continue; }   // 鐵路被拆或孤立,原地待命
       }
       const pick=opts[Math.floor(Math.random()*opts.length)];
