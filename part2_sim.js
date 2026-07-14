@@ -339,6 +339,47 @@ function computeStats(){
   blur(cri,2);
 }
 
+/* ── 存檔(localStorage 自動存檔 + JSON 匯出入) ── */
+const SAVE_KEY='simcity3d:save', SAVE_VER=1;
+
+function serializeCity(){
+  const cobj={};
+  for(const k in city) if(!(city[k] instanceof Float32Array)) cobj[k]=city[k];
+  const cells=[];
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const c=G[x][y];
+    cells.push([c.t, c.lvl, c.ax, c.ay, (c.br?1:0)|(c.wr?2:0), c.fire, +c.v.toFixed(3)]);
+  }
+  return {ver:SAVE_VER, savedAt:Date.now(), city:cobj, cells};
+}
+
+function saveCity(){
+  if(!city||!G) return;
+  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(serializeCity())); }catch(e){}
+}
+
+function readSave(){
+  try{
+    const s=JSON.parse(localStorage.getItem(SAVE_KEY));
+    return (s && s.ver===SAVE_VER && Array.isArray(s.cells) && s.cells.length===N*N) ? s : null;
+  }catch(e){ return null; }
+}
+
+function loadCity(s){
+  if(!s) return false;
+  newCity(s.city.name, s.city.funds);   // 建骨架(地形會被覆蓋)
+  for(const k in s.city) city[k]=s.city[k];
+  let i=0;
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const d=s.cells[i++], c=G[x][y];
+    c.t=d[0]; c.lvl=d[1]; c.ax=d[2]; c.ay=d[3];
+    c.br=!!(d[4]&1); c.wr=!!(d[4]&2); c.fire=d[5]; c.v=d[6]; c.pow=false;
+  }
+  computePower();
+  computeStats();
+  return true;
+}
+
 /* ── 每月模擬節拍 ── */
 function simMonth(){
   const blackout = computePower();
@@ -426,6 +467,7 @@ function simMonth(){
     city.month=0; city.year++;
     if(city.funds>0) sfx('cash');
     toast(`${city.year} 年度結算:稅收 $${city.lastIncome*12|0},支出 $${city.lastExpense*12|0}(月均×12)`);
+    saveCity();   // 年度自動存檔
   }
   checkMilestones(blackout);
   dirty=true;

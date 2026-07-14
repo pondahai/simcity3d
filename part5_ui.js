@@ -159,6 +159,10 @@ function openNewCity(first){
     </div>
     <button class="bigbtn" id="goBtn">產生地形,開始建設</button>
     ${first?'':'<button class="bigbtn ghost" id="cancelBtn" style="margin-top:8px">取消</button>'}
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="bigbtn ghost" id="expBtn" style="flex:1;margin-top:0">📤 匯出存檔</button>
+      <button class="bigbtn ghost" id="impBtn" style="flex:1;margin-top:0">📥 匯入存檔</button>
+    </div>
     <div style="font-size:11.5px;color:var(--dim);margin-top:14px;line-height:1.8">
       玩法:先蓋 <b style="color:var(--amber2)">電廠</b> → 拉 <b style="color:var(--amber2)">電線</b> 到分區
       → 劃 <b style="color:var(--res)">住宅</b>/<b style="color:var(--com)">商業</b>/<b style="color:var(--ind)">工業</b>區並鋪路。
@@ -175,9 +179,43 @@ function openNewCity(first){
     if(mode==='walk') toggleView();
     bird.tx=0; bird.tz=0; bird.dist=150; updateBirdCam();
     dirty=true; updateHUD(); closeModal();
+    saveCity();
     toast(`「${nm}」奠基於 1900 年。祝施政順利,市長!`);
   };
   const cb=$('#cancelBtn'); if(cb) cb.onclick=closeModal;
+  $('#expBtn').onclick=()=>{
+    if(!city){ toast('尚無城市可匯出。'); return; }
+    const blob=new Blob([JSON.stringify(serializeCity())],{type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=`simcity3d_${city.name}_${city.year}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('存檔已匯出為 JSON 檔。');
+  };
+  $('#impBtn').onclick=()=>{
+    const inp=document.createElement('input');
+    inp.type='file'; inp.accept='.json,application/json';
+    inp.onchange=()=>{
+      const f=inp.files[0]; if(!f) return;
+      f.text().then(txt=>{
+        let s=null;
+        try{ s=JSON.parse(txt); }catch(e){}
+        if(!s || s.ver!==SAVE_VER || !Array.isArray(s.cells) || s.cells.length!==N*N){
+          toast('匯入失敗:不是有效的存檔檔案。'); sfx('deny'); return;
+        }
+        loadCity(s);
+        saveCity();
+        tornadoE=null; monsterE=null; cars=[];
+        overlay='none'; $('#legend').style.display='none';
+        if(mode==='walk') toggleView();
+        bird.tx=0; bird.tz=0; bird.dist=150; updateBirdCam();
+        dirty=true; updateHUD(); closeModal();
+        toast(`已匯入「${city.name}」(${city.year} 年)。`);
+      });
+    };
+    inp.click();
+  };
 }
 
 /* ── 音效(WebAudio 極簡合成) ── */
@@ -232,6 +270,9 @@ function bindUI(){
   hold('#rotR', ()=>{ if(mode==='bird'){ bird.yaw+=0.045; updateBirdCam(); } });
   hold('#zIn',  ()=>{ if(mode==='bird'){ bird.dist*=0.97; updateBirdCam(); } });
   hold('#zOut', ()=>{ if(mode==='bird'){ bird.dist*=1.03; updateBirdCam(); } });
+  // 關頁/切背景時自動存檔
+  window.addEventListener('pagehide', saveCity);
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') saveCity(); });
 }
 
 function loop(t){
@@ -281,14 +322,18 @@ function loop(t){
 /* ── 啟動 ── */
 function boot(){
   initGL();
-  newCity('新市鎮', 20000);
-  initCameras();
-  initInput();
-  buildToolbar();
-  bindUI();
-  updateHUD();
-  rebuildCity();
-  requestAnimationFrame(loop);
-  openNewCity(true);
+  const save=readSave();
+  if(save && loadCity(save)){
+    initCameras(); initInput(); buildToolbar(); bindUI();
+    updateHUD(); rebuildCity();
+    requestAnimationFrame(loop);
+    toast(`歡迎回來,市長!已自動載入「${city.name}」(${city.year} 年 ${city.month+1} 月)。想重新開始請按「🆕」。`);
+  } else {
+    newCity('新市鎮', 20000);
+    initCameras(); initInput(); buildToolbar(); bindUI();
+    updateHUD(); rebuildCity();
+    requestAnimationFrame(loop);
+    openNewCity(true);
+  }
 }
 boot();
