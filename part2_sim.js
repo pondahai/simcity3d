@@ -52,8 +52,12 @@ const inB = (x,y)=>x>=0&&y>=0&&x<N&&y<N;
 function newCell(t){ return {t, lvl:0, pow:false, ax:-1, ay:-1, fire:0, br:false, wr:false, rl:false, tier:0, v:Math.random()}; }
 
 /* 地價價位檔(0 低 / 1 中 / 2 高):只在建築升降級時取樣寫入 c.tier,
-   避免 landv 每月重算造成造型抖動 */
-function landTier(i){ const v=city.landv[i]; return v>=30?2 : v>=14?1 : 0; }
+   避免 landv 每月重算造成造型抖動。工業自身污染會壓垮地價,門檻另計 */
+function landTier(i,t){
+  const v=city.landv[i];
+  if(t===T.IND) return v>=8?2 : v>=3?1 : 0;
+  return v>=30?2 : v>=14?1 : 0;
+}
 
 function newCity(name, funds){
   city = {
@@ -402,7 +406,7 @@ function loadCity(s){
   if(legacy){   // 舊版存檔無 tier:以載入後的地價補採樣
     for(let x=0;x<N;x++)for(let y=0;y<N;y++){
       const c=G[x][y];
-      if(isZone(c.t)&&c.lvl>0) c.tier=landTier(idx(x,y));
+      if(isZone(c.t)&&c.lvl>0) c.tier=landTier(idx(x,y),c.t);
     }
   }
   return true;
@@ -422,9 +426,9 @@ function simMonth(){
     const envBad = (city.pollution[i]>55?0.35:0) + (city.crime[i]>55?0.35:0);
     if(c.pow && acc[i] && dem>0 && c.lvl<5){
       const p = 0.10 + dem*0.45 + (city.landv[i]>34?0.08:0) - envBad;
-      if(Math.random()<p){ c.lvl++; c.tier=landTier(i); }
+      if(Math.random()<p){ c.lvl++; c.tier=landTier(i,c.t); }
     } else if(!c.pow || dem<-0.25 || envBad>0.4){
-      if(c.lvl>0 && Math.random() < (!c.pow?0.35:0.12)){ c.lvl--; c.tier=landTier(i); }
+      if(c.lvl>0 && Math.random() < (!c.pow?0.35:0.12)){ c.lvl--; c.tier=landTier(i,c.t); }
     }
     if(c.t===T.RES) resSum+=c.lvl; else if(c.t===T.COM) comSum+=c.lvl; else indSum+=c.lvl;
   }

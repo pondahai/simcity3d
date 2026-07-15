@@ -2,7 +2,7 @@
 let renderer, scene, camBird, camWalk, activeCam;
 let groundMesh, boxMesh, coneMesh, cylMesh, carMesh;
 let boxN=0, coneN=0, cylN=0, groundN=0;
-const BOX_CAP=34000, CONE_CAP=9000, CYL_CAP=3000, CAR_CAP=140, GROUND_CAP=N*N*2;
+const BOX_CAP=34000, CONE_CAP=9000, CYL_CAP=5000, CAR_CAP=140, GROUND_CAP=N*N*2;
 let dirty=true, groundDirty=true;
 let quake=0;
 let overlay='none';         // none|power|pollution|crime|landv|traffic
@@ -392,25 +392,74 @@ function drawRes(c,X,Z){
     }
   }
 }
+/* 商業/工業同樣依 c.tier 換風格(住宅見 drawRes) */
+const COM_T0_WALL=[0xb0a08c,0xa39a8e,0x998f82];
+const COM_T0_SIGN=[0xc95a3f,0x3f8fc9,0xd4a636];
+const COM_T2_GLASS=[0x3f6c8c,0x55798f,0x2f5c7a];
+
 function drawCom(c,X,Z){
   if(c.lvl===0) return;
-  const h = 2 + c.lvl*2.1;
-  const glass=[0x6fa8c9,0x7fb3d6,0x5f93b5][(c.v*3)|0];
-  pBox(X,h/2,Z,2.9,h,2.9,glass,0);
-  pBox(X,h+0.18,Z,3.1,0.36,3.1,0x3f5666,0);
-  for(let f=0;f<c.lvl;f++){ pBox(X,1.2+f*2.1,Z,3.02,0.22,3.02,0xdfeeff,0); }
-  if(c.lvl>=3) pBox(X,h+0.9,Z,0.24,1.4,0.24,0x3f5666,0);
-  if(c.lvl>=1) pBox(X,0.9,Z+1.55,2.6,0.5,0.12,0xffb742,0); // 招牌
+  const vi=(c.v*3)|0, tier=c.tier|0;
+  if(tier===0){                       // 街邊商場:矮胖混凝土 + 大招牌 + 屋頂雜物
+    const h=1.6+c.lvl*1.2, w=COM_T0_WALL[vi];
+    pBox(X,h/2,Z,3.1,h,2.9,w,0);
+    pBox(X,h+0.15,Z,3.3,0.3,3.1,0x847b72,0);
+    pBox(X,0.55,Z+1.5,2.8,1.1,0.12,0x59554f,0);           // 鐵捲門面
+    pBox(X,h-0.35,Z+1.53,3.0,0.6,0.16,COM_T0_SIGN[vi],0); // 大招牌
+    if(c.lvl>=3) pBox(X+0.95,h+0.7,Z-0.7,1.0,1.0,1.0,w,0);
+    if(c.lvl>=5) pCyl(X-1.0,h+0.85,Z+0.6,0.35,1.2,0x8a8378);
+  } else if(tier===1){                // 一般玻璃樓(原造型)
+    const h = 2 + c.lvl*2.1;
+    const glass=[0x6fa8c9,0x7fb3d6,0x5f93b5][vi];
+    pBox(X,h/2,Z,2.9,h,2.9,glass,0);
+    pBox(X,h+0.18,Z,3.1,0.36,3.1,0x3f5666,0);
+    for(let f=0;f<c.lvl;f++){ pBox(X,1.2+f*2.1,Z,3.02,0.22,3.02,0xdfeeff,0); }
+    if(c.lvl>=3) pBox(X,h+0.9,Z,0.24,1.4,0.24,0x3f5666,0);
+    if(c.lvl>=1) pBox(X,0.9,Z+1.55,2.6,0.5,0.12,0xffb742,0); // 招牌
+  } else {                            // CBD 帷幕塔:深色高級玻璃 + 白色門廳 + 塔冠
+    const h=2.6+c.lvl*2.4, g=COM_T2_GLASS[vi];
+    pBox(X,h/2,Z,2.7,h,2.7,g,0);
+    for(let f=1;f<c.lvl;f++) pBox(X,1.3+f*2.2,Z,2.82,0.2,2.82,0xbcd8ea,0);
+    pBox(X,0.7,Z,3.1,1.4,3.1,0xe8e2d4,0);                 // 門廳基座
+    if(vi===0) pBox(X,h+1.1,Z,0.22,2.2,0.22,0xd9c48a,0);  // 尖塔
+    if(vi===1) pBox(X,h+0.4,Z,1.6,0.8,1.6,0xd9c48a,0);    // 金冠
+    if(vi===2){ pBox(X,h+0.3,Z,2.1,0.6,2.1,g,0); pBox(X,h+0.8,Z,1.4,0.5,1.4,g,0); } // 退縮階頂
+  }
 }
+
+const IND_T0_BODY=[0x8f6f52,0x7d6a56,0x96755e];
+const IND_T2_BODY=[0xdfe3e6,0xd6dbd2,0xe4ded0];
+
 function drawInd(c,X,Z){
   if(c.lvl===0) return;
-  const body=[0xb8b2a6,0xc9b98e,0xa9a49b][(c.v*3)|0];
-  pBox(X,1.4,Z,3.2,2.8,3.0,body,0);
-  pCone(X-0.8,3.2,Z,1.3,1.0,0x8a8478,Math.PI/4);
-  pCyl(X+1.1,3.6,Z+0.9,0.28,2.6,0x6e6a63);
-  if(c.lvl>=3){ pCyl(X+0.3,4.0,Z-0.9,0.3,3.4,0x5f5b55); pBox(X-1.0,3.4,Z+0.9,1.2,1.2,1.2,body,0); }
-  if(c.lvl>=5){ pBox(X,3.4,Z,2.0,1.4,1.8,0x97918a,0); }
-  pBox(X,0.35,Z-1.62,2.8,0.7,0.14,0x77706a,0); // 圍牆
+  const vi=(c.v*3)|0, tier=c.tier|0;
+  if(tier===0){                       // 鏽蝕重工業:深色屋頂 + 雙煙囪 + 儲槽
+    const b=IND_T0_BODY[vi];
+    pBox(X,1.3,Z,3.3,2.6,3.0,b,0);
+    pBox(X,2.75,Z,3.4,0.3,3.1,0x574f45,0);
+    pCyl(X+1.2,3.5,Z+0.9,0.3,2.8,0x4f4b45);
+    pCyl(X+0.5,3.9,Z+0.9,0.26,3.6,0x4f4b45);
+    pCyl(X-1.05,1.0,Z-0.9,0.6,2.0,0x8a7a62);              // 鏽儲槽
+    if(c.lvl>=3) pBox(X-1.0,3.3,Z+0.3,1.3,1.1,1.2,b,0);
+    if(c.lvl>=5) pCyl(X-0.2,4.4,Z-0.9,0.3,4.2,0x453f38);
+  } else if(tier===1){                // 一般工廠(原造型)
+    const body=[0xb8b2a6,0xc9b98e,0xa9a49b][vi];
+    pBox(X,1.4,Z,3.2,2.8,3.0,body,0);
+    pCone(X-0.8,3.2,Z,1.3,1.0,0x8a8478,Math.PI/4);
+    pCyl(X+1.1,3.6,Z+0.9,0.28,2.6,0x6e6a63);
+    if(c.lvl>=3){ pCyl(X+0.3,4.0,Z-0.9,0.3,3.4,0x5f5b55); pBox(X-1.0,3.4,Z+0.9,1.2,1.2,1.2,body,0); }
+    if(c.lvl>=5){ pBox(X,3.4,Z,2.0,1.4,1.8,0x97918a,0); }
+    pBox(X,0.35,Z-1.62,2.8,0.7,0.14,0x77706a,0);          // 圍牆
+  } else {                            // 科技園區:淺色廠辦 + 藍窗帶 + 綠地
+    pBox(X,0.08,Z,3.6,0.16,3.6,0x7fae62,0);
+    pBox(X,1.25,Z-0.3,3.0,2.5,2.4,IND_T2_BODY[vi],0);
+    pBox(X,1.4,Z+0.95,3.04,0.7,0.16,0x6fa8c9,0);          // 窗帶
+    pBox(X,2.62,Z-0.3,3.2,0.24,2.6,0xaeb6bc,0);
+    if(vi===0) pCyl(X+1.25,0.85,Z+1.2,0.5,1.3,0xd6dbd2);  // 圓頂槽
+    if(vi===1) pBox(X+1.2,0.55,Z+1.2,1.0,0.12,1.0,0x3f5666,0.4); // 太陽能板
+    if(vi===2) pCone(X+1.25,0.8,Z+1.2,0.5,1.3,0x4f7d46,0);       // 園區綠樹
+    if(c.lvl>=4) pBox(X-0.8,3.1,Z-0.3,1.2,0.9,1.2,0xc3c9cc,0);   // 頂樓機房
+  }
 }
 
 function drawBig(c,x,y){

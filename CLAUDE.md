@@ -16,7 +16,7 @@ python3 build.py   # 將 part1~part5 組裝成 立體模擬城市.html
 - `part5_ui.js` — buildToolbar()、updateHUD()、toast()、showQuery()、預算/圖層/災難/新城市彈窗、sfx() WebAudio 音效、主迴圈 loop()(SPD_MS=[∞,2400,1100,380] 月節拍)、boot()。
 
 ## 遊戲系統
-RCI 分區 lvl 0-5 自動生長(需供電+3 格內道路+需求>0);電網 BFS 供電依容量;鐵路(可達性同道路,交通壅塞×0.3、免交通污染,維護 0.5/格 vs 道路 0.18,火車動畫);跨河橋(道路/鐵路/電線水上 5 倍造價,c.br 旗標,拆除還原成水);稅率+交通/警察/消防撥款(月結,交通撥款<100% 時道路/鐵路每月 (1−撥款)×1.2% 機率劣化成瓦礫);六災難(火/洪/龍捲風/地震/巨獸/空難);時間流速 4 段;人口里程碑;查詢工具;圖層 overlay(power/pollution/crime/landv/traffic);地價價位檔 c.tier(0 低/1 中/2 高,landTier() 門檻 14/30)——lvl 管建物規模、tier 管風格,住宅已有 3 檔×3 變體造型(part3 drawRes),tier 只在 simMonth 升降級時取樣避免每月抖動。
+RCI 分區 lvl 0-5 自動生長(需供電+3 格內道路+需求>0);電網 BFS 供電依容量;鐵路(可達性同道路,交通壅塞×0.3、免交通污染,維護 0.5/格 vs 道路 0.18,火車動畫);跨河橋(道路/鐵路/電線水上 5 倍造價,c.br 旗標,拆除還原成水);稅率+交通/警察/消防撥款(月結,交通撥款<100% 時道路/鐵路每月 (1−撥款)×1.2% 機率劣化成瓦礫);六災難(火/洪/龍捲風/地震/巨獸/空難);時間流速 4 段;人口里程碑;查詢工具;圖層 overlay(power/pollution/crime/landv/traffic);地價價位檔 c.tier(0 低/1 中/2 高,landTier() 門檻 14/30;工業自身污染壓垮地價故門檻另計 3/8)——lvl 管建物規模、tier 管風格,RCI 三分區各有 3 檔×3 變體造型(part3 drawRes/drawCom/drawInd:棚屋/別墅、街邊商場/CBD 金冠塔、鏽工廠/科技園區),tier 只在 simMonth 升降級時取樣避免每月抖動。低檔工業多用圓柱(煙囪/儲槽),CYL_CAP 已擴至 5000。
 
 ## 已修過的坑
 1. r128 InstancedMesh setColorAt+Lambert → 全黑。已改自訂 shader(見 part3)。
