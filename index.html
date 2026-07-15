@@ -236,7 +236,11 @@ let city = null;              // 城市總狀態
 const idx = (x,y)=>x*N+y;
 const inB = (x,y)=>x>=0&&y>=0&&x<N&&y<N;
 
-function newCell(t){ return {t, lvl:0, pow:false, ax:-1, ay:-1, fire:0, br:false, wr:false, rl:false, v:Math.random()}; }
+function newCell(t){ return {t, lvl:0, pow:false, ax:-1, ay:-1, fire:0, br:false, wr:false, rl:false, tier:0, v:Math.random()}; }
+
+/* 地價價位檔(0 低 / 1 中 / 2 高):只在建築升降級時取樣寫入 c.tier,
+   避免 landv 每月重算造成造型抖動 */
+function landTier(i){ const v=city.landv[i]; return v>=30?2 : v>=14?1 : 0; }
 
 function newCity(name, funds){
   city = {
@@ -395,7 +399,7 @@ function doze(x,y){
   for(const [cx,cy] of cells){
     const cc=G[cx][cy];
     cc.t = cc.br ? T.WATER : T.GRASS;
-    cc.br=false; cc.wr=false; cc.rl=false; cc.lvl=0; cc.fire=0; cc.ax=-1; cc.ay=-1;
+    cc.br=false; cc.wr=false; cc.rl=false; cc.lvl=0; cc.fire=0; cc.ax=-1; cc.ay=-1; cc.tier=0;
   }
   computePower();
   sfx('doze'); dirty=true; updateHUD();
@@ -552,7 +556,7 @@ function serializeCity(){
   const cells=[];
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
     const c=G[x][y];
-    cells.push([c.t, c.lvl, c.ax, c.ay, (c.br?1:0)|(c.wr?2:0)|(c.rl?4:0), c.fire, +c.v.toFixed(3)]);
+    cells.push([c.t, c.lvl, c.ax, c.ay, (c.br?1:0)|(c.wr?2:0)|(c.rl?4:0), c.fire, +c.v.toFixed(3), c.tier]);
   }
   return {ver:SAVE_VER, savedAt:Date.now(), city:cobj, cells};
 }
@@ -573,14 +577,21 @@ function loadCity(s){
   if(!s) return false;
   newCity(s.city.name, s.city.funds);   // 建骨架(地形會被覆蓋)
   for(const k in s.city) city[k]=s.city[k];
-  let i=0;
+  let i=0, legacy=false;
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
     const d=s.cells[i++], c=G[x][y];
     c.t=d[0]; c.lvl=d[1]; c.ax=d[2]; c.ay=d[3];
     c.br=!!(d[4]&1); c.wr=!!(d[4]&2); c.rl=!!(d[4]&4); c.fire=d[5]; c.v=d[6]; c.pow=false;
+    if(d.length>7) c.tier=d[7]; else { c.tier=0; legacy=true; }
   }
   computePower();
   computeStats();
+  if(legacy){   // 舊版存檔無 tier:以載入後的地價補採樣
+    for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+      const c=G[x][y];
+      if(isZone(c.t)&&c.lvl>0) c.tier=landTier(idx(x,y));
+    }
+  }
   return true;
 }
 
@@ -598,9 +609,9 @@ function simMonth(){
     const envBad = (city.pollution[i]>55?0.35:0) + (city.crime[i]>55?0.35:0);
     if(c.pow && acc[i] && dem>0 && c.lvl<5){
       const p = 0.10 + dem*0.45 + (city.landv[i]>34?0.08:0) - envBad;
-      if(Math.random()<p) c.lvl++;
+      if(Math.random()<p){ c.lvl++; c.tier=landTier(i); }
     } else if(!c.pow || dem<-0.25 || envBad>0.4){
-      if(c.lvl>0 && Math.random() < (!c.pow?0.35:0.12)) c.lvl--;
+      if(c.lvl>0 && Math.random() < (!c.pow?0.35:0.12)){ c.lvl--; c.tier=landTier(i); }
     }
     if(c.t===T.RES) resSum+=c.lvl; else if(c.t===T.COM) comSum+=c.lvl; else indSum+=c.lvl;
   }
@@ -1140,22 +1151,79 @@ function drawWire(x,y,X,Z,pow){
 }
 function condAt(x,y){ const c=G[x][y]; return c.t===T.WIRE||c.wr||isZone(c.t)||isBigB(c.t); }
 
+/* 住宅依地價價位檔(c.tier 0低/1中/2高)換風格,c.v 選 3 種變體 */
+const RES_T0_WALL=[0x9b8e7c,0x8a8378,0xa08b6f];
+const RES_T0_ROOF=[0x6b5f52,0x5e5952,0x77695a];
+const RES_T2_WALL=[0xfaf3e3,0xf0e6cf,0xf5eee2];
+const RES_T2_ROOF=[0xb5503f,0x4a627a,0x5d7a52];
+
 function drawRes(c,X,Z){
   if(c.lvl===0) return;
-  const wall=RESWALL[(c.v*4)|0], roof=ROOFCOL[(c.v*7|0)%4];
-  if(c.lvl<=2){                       // 小屋
-    pBox(X,0.9,Z,2.4,1.8,2.2,wall,0);
-    pCone(X,2.5,Z,2.0,1.4,roof,Math.PI/4);
-    if(c.lvl===2){ pBox(X+1.4,0.6,Z+1.2,0.9,1.2,0.9,wall); }
-  } else if(c.lvl<=4){                // 連棟宅
-    pBox(X-0.85,1.3,Z,1.7,2.6,2.6,wall,0);
-    pCone(X-0.85,3.2,Z,1.5,1.2,roof,Math.PI/4);
-    pBox(X+1.05,1.0,Z+0.3,1.6,2.0,2.0,RESWALL[((c.v*9)|0)%4],0);
-    pCone(X+1.05,2.6,Z+0.3,1.4,1.1,ROOFCOL[((c.v*5)|0)%4],Math.PI/4);
-  } else {                            // 公寓塔
-    pBox(X,4.4,Z,2.9,8.8,2.9,0xe3d5be,0);
-    pBox(X,9.0,Z,3.1,0.4,3.1,0x8f8577,0);
-    for(let f=0;f<4;f++) pBox(X,1.6+f*2,Z+1.5,2.5,0.5,0.14,0x5f7d8c);
+  const vi=(c.v*3)|0, tier=c.tier|0;
+  if(c.lvl<=2){                       // ── 小屋級 ──
+    if(tier===0){                     // 棚屋:灰撲撲平頂 + 雜物
+      const w=RES_T0_WALL[vi];
+      pBox(X-0.2,0.8,Z,2.3,1.6,2.1,w,0);
+      pBox(X-0.2,1.7,Z,2.6,0.22,2.4,RES_T0_ROOF[vi],0);
+      if(vi===0) pBox(X+1.3,0.45,Z+1.1,0.9,0.9,0.8,0x7a7268,0);
+      if(vi===1) pBox(X+1.35,0.55,Z-0.9,0.7,1.1,0.7,RES_T0_WALL[2],0.5);
+      if(vi===2) pCyl(X+1.4,0.7,Z+1.2,0.3,1.4,0x6e6a63);
+    } else if(tier===1){              // 一般小屋(原造型)
+      const wall=RESWALL[(c.v*4)|0], roof=ROOFCOL[(c.v*7|0)%4];
+      pBox(X,0.9,Z,2.4,1.8,2.2,wall,0);
+      pCone(X,2.5,Z,2.0,1.4,roof,Math.PI/4);
+      if(c.lvl===2){ pBox(X+1.4,0.6,Z+1.2,0.9,1.2,0.9,wall); }
+    } else {                          // 別墅:亮牆 + 庭院草坪 + 特色小物
+      pBox(X,0.09,Z,3.5,0.18,3.5,0x7fae62,0);            // 草坪
+      pBox(X-0.4,1.0,Z-0.3,2.3,2.0,2.2,RES_T2_WALL[vi],0);
+      pCone(X-0.4,2.8,Z-0.3,1.9,1.5,RES_T2_ROOF[vi],Math.PI/4);
+      if(vi===0) pBox(X+1.15,0.22,Z+1.15,1.1,0.1,1.1,0x5fa8c9,0);   // 泳池
+      if(vi===1) pCone(X+1.25,0.95,Z+1.1,0.6,1.5,0x4f7d46,0);       // 庭木
+      if(vi===2) pBox(X+0.55,2.6,Z-0.9,0.36,1.3,0.36,RES_T2_ROOF[0],0); // 煙囪
+    }
+  } else if(c.lvl<=4){                // ── 連棟級 ──
+    if(tier===0){                     // 老公寓:兩棟舊樓 + 頂樓水塔
+      const w1=RES_T0_WALL[vi], w2=RES_T0_WALL[(vi+1)%3];
+      pBox(X-0.85,1.5,Z,1.8,3.0,2.7,w1,0);
+      pBox(X-0.85,3.1,Z,2.0,0.2,2.9,RES_T0_ROOF[vi],0);
+      pBox(X+1.05,1.1,Z+0.25,1.6,2.2,2.1,w2,0);
+      pBox(X+1.05,2.3,Z+0.25,1.8,0.18,2.3,RES_T0_ROOF[(vi+1)%3],0);
+      if(vi!==1) pCyl(X-0.85,3.6,Z+0.6,0.32,0.9,0x8a8378);
+      if(vi===1) pBox(X+1.05,2.7,Z+0.25,1.0,0.7,0.9,w2,0);
+    } else if(tier===1){              // 連棟宅(原造型)
+      const wall=RESWALL[(c.v*4)|0], roof=ROOFCOL[(c.v*7|0)%4];
+      pBox(X-0.85,1.3,Z,1.7,2.6,2.6,wall,0);
+      pCone(X-0.85,3.2,Z,1.5,1.2,roof,Math.PI/4);
+      pBox(X+1.05,1.0,Z+0.3,1.6,2.0,2.0,RESWALL[((c.v*9)|0)%4],0);
+      pCone(X+1.05,2.6,Z+0.3,1.4,1.1,ROOFCOL[((c.v*5)|0)%4],Math.PI/4);
+    } else {                          // 排屋豪宅:草坪 + 白牆雙棟 + 深色斜頂
+      pBox(X,0.09,Z,3.6,0.18,3.6,0x7fae62,0);
+      pBox(X-0.85,1.5,Z-0.2,1.8,3.0,2.5,RES_T2_WALL[vi],0);
+      pCone(X-0.85,3.7,Z-0.2,1.6,1.4,RES_T2_ROOF[vi],Math.PI/4);
+      pBox(X+1.0,1.25,Z+0.2,1.7,2.5,2.2,RES_T2_WALL[(vi+1)%3],0);
+      pCone(X+1.0,3.2,Z+0.2,1.5,1.3,RES_T2_ROOF[(vi+1)%3],Math.PI/4);
+      if(vi===2) pCone(X-0.1,0.9,Z+1.45,0.5,1.3,0x4f7d46,0);
+    }
+  } else {                            // ── 塔樓級 ──
+    if(tier===0){                     // 板樓:寬扁灰樓 + 密集窗帶
+      const w=RES_T0_WALL[vi];
+      pBox(X,3.6,Z,3.4,7.2,2.6,w,0);
+      pBox(X,7.35,Z,3.6,0.3,2.8,RES_T0_ROOF[vi],0);
+      for(let f=0;f<3;f++) pBox(X,1.5+f*2.1,Z+1.35,3.1,0.42,0.12,0x55606b);
+      if(vi===0) pCyl(X+1.0,8.0,Z+0.6,0.3,1.0,0x8a8378);
+    } else if(tier===1){              // 公寓塔(原造型)
+      pBox(X,4.4,Z,2.9,8.8,2.9,0xe3d5be,0);
+      pBox(X,9.0,Z,3.1,0.4,3.1,0x8f8577,0);
+      for(let f=0;f<4;f++) pBox(X,1.6+f*2,Z+1.5,2.5,0.5,0.14,0x5f7d8c);
+    } else {                          // 高級塔樓:修長亮塔 + 頂層豪華層 + 雙面窗帶
+      pBox(X,5.0,Z,2.5,10.0,2.5,RES_T2_WALL[vi],0);
+      pBox(X,10.5,Z,2.8,1.0,2.8,RES_T2_ROOF[vi],0);
+      for(let f=0;f<5;f++){
+        pBox(X,1.5+f*1.9,Z+1.3,2.1,0.5,0.12,0x6fa8c9);
+        pBox(X+1.3,1.5+f*1.9,Z,0.12,0.5,2.1,0x6fa8c9);
+      }
+      if(vi===1) pBox(X,0.09,Z,3.4,0.18,3.4,0x7fae62,0);
+    }
   }
 }
 function drawCom(c,X,Z){

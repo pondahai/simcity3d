@@ -49,7 +49,11 @@ let city = null;              // 城市總狀態
 const idx = (x,y)=>x*N+y;
 const inB = (x,y)=>x>=0&&y>=0&&x<N&&y<N;
 
-function newCell(t){ return {t, lvl:0, pow:false, ax:-1, ay:-1, fire:0, br:false, wr:false, rl:false, v:Math.random()}; }
+function newCell(t){ return {t, lvl:0, pow:false, ax:-1, ay:-1, fire:0, br:false, wr:false, rl:false, tier:0, v:Math.random()}; }
+
+/* 地價價位檔(0 低 / 1 中 / 2 高):只在建築升降級時取樣寫入 c.tier,
+   避免 landv 每月重算造成造型抖動 */
+function landTier(i){ const v=city.landv[i]; return v>=30?2 : v>=14?1 : 0; }
 
 function newCity(name, funds){
   city = {
@@ -208,7 +212,7 @@ function doze(x,y){
   for(const [cx,cy] of cells){
     const cc=G[cx][cy];
     cc.t = cc.br ? T.WATER : T.GRASS;
-    cc.br=false; cc.wr=false; cc.rl=false; cc.lvl=0; cc.fire=0; cc.ax=-1; cc.ay=-1;
+    cc.br=false; cc.wr=false; cc.rl=false; cc.lvl=0; cc.fire=0; cc.ax=-1; cc.ay=-1; cc.tier=0;
   }
   computePower();
   sfx('doze'); dirty=true; updateHUD();
@@ -365,7 +369,7 @@ function serializeCity(){
   const cells=[];
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
     const c=G[x][y];
-    cells.push([c.t, c.lvl, c.ax, c.ay, (c.br?1:0)|(c.wr?2:0)|(c.rl?4:0), c.fire, +c.v.toFixed(3)]);
+    cells.push([c.t, c.lvl, c.ax, c.ay, (c.br?1:0)|(c.wr?2:0)|(c.rl?4:0), c.fire, +c.v.toFixed(3), c.tier]);
   }
   return {ver:SAVE_VER, savedAt:Date.now(), city:cobj, cells};
 }
@@ -386,14 +390,21 @@ function loadCity(s){
   if(!s) return false;
   newCity(s.city.name, s.city.funds);   // 建骨架(地形會被覆蓋)
   for(const k in s.city) city[k]=s.city[k];
-  let i=0;
+  let i=0, legacy=false;
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
     const d=s.cells[i++], c=G[x][y];
     c.t=d[0]; c.lvl=d[1]; c.ax=d[2]; c.ay=d[3];
     c.br=!!(d[4]&1); c.wr=!!(d[4]&2); c.rl=!!(d[4]&4); c.fire=d[5]; c.v=d[6]; c.pow=false;
+    if(d.length>7) c.tier=d[7]; else { c.tier=0; legacy=true; }
   }
   computePower();
   computeStats();
+  if(legacy){   // 舊版存檔無 tier:以載入後的地價補採樣
+    for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+      const c=G[x][y];
+      if(isZone(c.t)&&c.lvl>0) c.tier=landTier(idx(x,y));
+    }
+  }
   return true;
 }
 
@@ -411,9 +422,9 @@ function simMonth(){
     const envBad = (city.pollution[i]>55?0.35:0) + (city.crime[i]>55?0.35:0);
     if(c.pow && acc[i] && dem>0 && c.lvl<5){
       const p = 0.10 + dem*0.45 + (city.landv[i]>34?0.08:0) - envBad;
-      if(Math.random()<p) c.lvl++;
+      if(Math.random()<p){ c.lvl++; c.tier=landTier(i); }
     } else if(!c.pow || dem<-0.25 || envBad>0.4){
-      if(c.lvl>0 && Math.random() < (!c.pow?0.35:0.12)) c.lvl--;
+      if(c.lvl>0 && Math.random() < (!c.pow?0.35:0.12)){ c.lvl--; c.tier=landTier(i); }
     }
     if(c.t===T.RES) resSum+=c.lvl; else if(c.t===T.COM) comSum+=c.lvl; else indSum+=c.lvl;
   }
