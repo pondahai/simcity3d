@@ -6,6 +6,7 @@ const BOX_CAP=34000, CONE_CAP=9000, CYL_CAP=5000, CAR_CAP=140, GROUND_CAP=N*N*2;
 let dirty=true, groundDirty=true;
 let quake=0;
 let overlay='none';         // none|power|pollution|crime|landv|traffic
+let ovShowBldg=false;       // 圖層開啟時是否仍畫立體建築(預設壓扁成色塊)
 const _d=new THREE.Object3D(), _c=new THREE.Color();
 
 const wx = x => (x - N/2)*TILE + TILE/2;
@@ -205,12 +206,16 @@ const ROOFCOL=[0xc0574a,0x7d6b5d,0x5f7d8c,0xa8703f];
 function rebuildCity(){
   boxN=0; coneN=0; cylN=0;
   const seasonNoOverlay = overlay==='none';
+  // 圖層檢視:建築壓扁成半格高色塊(道路/鐵路/電線照畫,供對照電網)
+  const flat = overlay!=='none' && !ovShowBldg;
+  const pFlat=(c,X,Z,col)=>{ if(c.lvl>0) pBox(X,0.31,Z,TILE*0.84,0.5,TILE*0.84,col,0); };
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
     const c=G[x][y];
     const X=wx(x), Z=wz(y);
     const vr=c.v;
     switch(c.t){
       case T.TREE:
+        if(flat) break;
         pCyl(X,0.45,Z,0.16,0.9,0x6d4c33);
         pCone(X,1.6,Z,1.15,2.3,vr<0.5?0x3e7c47:0x4f9152, vr*3);
         if(vr>0.72) pCone(X+1.1,1.1,Z-0.8,0.8,1.6,0x3a7343, vr*5);
@@ -218,11 +223,12 @@ function rebuildCity(){
       case T.ROAD: drawRoadDeco(x,y,X,Z); if(c.rl) drawRail(x,y,X,Z,true); break;
       case T.RAIL: drawRail(x,y,X,Z); break;
       case T.WIRE: drawWire(x,y,X,Z,c.pow); break;
-      case T.RES: drawRes(c,X,Z); break;
-      case T.COM: drawCom(c,X,Z); break;
-      case T.IND: drawInd(c,X,Z); break;
+      case T.RES: if(flat) pFlat(c,X,Z,0x4cc36b); else drawRes(c,X,Z); break;
+      case T.COM: if(flat) pFlat(c,X,Z,0x4d9de0); else drawCom(c,X,Z); break;
+      case T.IND: if(flat) pFlat(c,X,Z,0xe8c14a); else drawInd(c,X,Z); break;
       case T.PARK:
         pBox(X,0.06,Z,TILE*0.96,0.12,TILE*0.96,0x5c9e57);
+        if(flat) break;
         pCyl(X-0.9,0.4,Z+0.7,0.13,0.8,0x6d4c33);
         pCone(X-0.9,1.35,Z+0.7,0.9,1.7,0x4f9152,vr*4);
         pCyl(X+1,0.4,Z-0.8,0.13,0.8,0x6d4c33);
@@ -242,7 +248,12 @@ function rebuildCity(){
     // 道路/鐵路上的交叉電線
     if(c.wr) drawWire(x,y,X,Z,c.pow);
     // 大建築只在錨點畫一次
-    if(isBigB(c.t) && c.ax===x && c.ay===y) drawBig(c,x,y);
+    if(isBigB(c.t) && c.ax===x && c.ay===y){
+      if(flat){
+        const w=BSPEC[c.t].w, cx=X+(w-1)*TILE/2, cz=Z+(w-1)*TILE/2;
+        pBox(cx,0.31,cz,w*TILE*0.92,0.5,w*TILE*0.92,0x9aa2ac,0);
+      } else drawBig(c,x,y);
+    }
     // 停電閃爍標記(無覆蓋圖時)
     if(seasonNoOverlay && (isZone(c.t)&&c.lvl>0 || (isBigB(c.t)&&c.ax===x&&c.ay===y)) && !c.pow
        && c.t!==T.COAL && c.t!==T.NUKE){

@@ -205,6 +205,7 @@ function showCursor(x,y){
       if(!inB(x+i,y+j)){ ok=false; continue; }
       const cc=G[x+i][y+j];
       const legal = buildable(cc) || (isTrans && cc.t===T.WATER) ||
+        (city.autoDoze && !isTrans && cc.t===T.WIRE && !cc.br) ||
         (t===T.WIRE && (cc.t===T.ROAD||cc.t===T.RAIL) && !cc.br && !cc.wr && !cc.rl) ||
         ((t===T.ROAD||t===T.RAIL) && cc.t===T.WIRE && !cc.br) ||
         (t===T.RAIL && cc.t===T.ROAD && !cc.br && !cc.wr && !cc.rl) ||

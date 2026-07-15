@@ -66,6 +66,15 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 @keyframes blink{50%{opacity:.25}}
 #tickerText{font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
+/* ── 災難警報橫幅 ── */
+#alert{position:fixed;top:64px;left:50%;transform:translate(-50%,-12px);z-index:35;
+  background:linear-gradient(#7a1f1a,#5c1512);border:1px solid #e05d5d;border-radius:10px;
+  padding:11px 26px;font-size:17px;font-weight:700;color:#ffe3e0;letter-spacing:2px;
+  white-space:nowrap;max-width:94vw;overflow:hidden;text-overflow:ellipsis;
+  box-shadow:0 8px 30px rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
+#alert.show{opacity:1;transform:translate(-50%,0);animation:alertPulse 0.9s infinite}
+@keyframes alertPulse{50%{border-color:#ffb742;box-shadow:0 0 24px rgba(224,93,93,.6)}}
+
 /* ── 街景模式提示與虛擬搖桿 ── */
 #walkHint{position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:15;
   background:rgba(12,18,26,.82);border:1px solid var(--line);border-radius:8px;
@@ -161,6 +170,9 @@ input[type=range]{width:100%;accent-color:var(--amber)}
 
 <!-- 左側工具列 -->
 <div id="toolbar"></div>
+
+<!-- 災難警報橫幅 -->
+<div id="alert"></div>
 
 <!-- 街景提示與搖桿 -->
 <div id="walkHint">W A S D / 方向鍵 移動 ・ 拖曳畫面環顧 ・ Shift 跑步<br>手機:左下搖桿移動,右半邊拖曳環顧</div>

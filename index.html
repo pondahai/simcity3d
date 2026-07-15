@@ -66,6 +66,15 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 @keyframes blink{50%{opacity:.25}}
 #tickerText{font-size:13px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
+/* ── 災難警報橫幅 ── */
+#alert{position:fixed;top:64px;left:50%;transform:translate(-50%,-12px);z-index:35;
+  background:linear-gradient(#7a1f1a,#5c1512);border:1px solid #e05d5d;border-radius:10px;
+  padding:11px 26px;font-size:17px;font-weight:700;color:#ffe3e0;letter-spacing:2px;
+  white-space:nowrap;max-width:94vw;overflow:hidden;text-overflow:ellipsis;
+  box-shadow:0 8px 30px rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
+#alert.show{opacity:1;transform:translate(-50%,0);animation:alertPulse 0.9s infinite}
+@keyframes alertPulse{50%{border-color:#ffb742;box-shadow:0 0 24px rgba(224,93,93,.6)}}
+
 /* ── 街景模式提示與虛擬搖桿 ── */
 #walkHint{position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:15;
   background:rgba(12,18,26,.82);border:1px solid var(--line);border-radius:8px;
@@ -162,6 +171,9 @@ input[type=range]{width:100%;accent-color:var(--amber)}
 <!-- 左側工具列 -->
 <div id="toolbar"></div>
 
+<!-- 災難警報橫幅 -->
+<div id="alert"></div>
+
 <!-- 街景提示與搖桿 -->
 <div id="walkHint">W A S D / 方向鍵 移動 ・ 拖曳畫面環顧 ・ Shift 跑步<br>手機:左下搖桿移動,右半邊拖曳環顧</div>
 <div id="stick"><div id="stickKnob"></div></div>
@@ -209,6 +221,7 @@ const TNAME = {0:'草地',1:'水域',2:'樹林',3:'道路',4:'鐵路',5:'電線'
 const TOOLS = [
   {id:'query', ic:'🔍', nm:'查詢',   pr:0},
   {id:'doze',  ic:'🚜', nm:'推土機', pr:1},
+  {id:'autodoze', ic:'♻️', nm:'自動推土', tg:true},
   {grp:'交通'},
   {id:'road',  ic:'🛣️', nm:'道路',   pr:10,  t:T.ROAD},
   {id:'rail',  ic:'🛤️', nm:'鐵路',   pr:20,  t:T.RAIL},
@@ -254,7 +267,7 @@ function newCity(name, funds){
     demR:0.6, demC:0, demI:0.4, ext:20,
     fundRoad:1, fundPolice:1, fundFire:1,
     lastIncome:0, lastExpense:0,
-    autoDisaster:true, milestones:{},
+    autoDisaster:true, autoDoze:true, milestones:{},
     powerOK:true, title:'拓荒地',
   };
   genTerrain();
@@ -306,7 +319,8 @@ function genTerrain(){
 const isZone = t => t===T.RES||t===T.COM||t===T.IND;
 const isBigB = t => BSPEC[t]!==undefined;
 const flammable = t => isZone(t)||t===T.TREE||isBigB(t)||t===T.PARK;
-const buildable = c => c.t===T.GRASS || c.t===T.TREE;
+/* 自動推土機開啟時,樹林/瓦礫可直接施工覆蓋(每格加收 $1 清除費) */
+const buildable = c => c.t===T.GRASS || (city.autoDoze && (c.t===T.TREE || c.t===T.RUBBLE));
 
 function toolCost(tl){ return tl.pr; }
 
@@ -345,9 +359,14 @@ function place(tool, x, y){
     return true;
   }
   const onWater = isTrans && G[x][y].t===T.WATER;   // 跨河橋
+  let clear=0, wires=0;   // 自動推土:清除費與拆除電線數
   for(let i=0;i<w;i++)for(let j=0;j<w;j++){
     const cc=G[x+i][y+j];
-    if(!(buildable(cc) || (isTrans && cc.t===T.WATER))) return false;
+    if(buildable(cc)){ if(cc.t===T.TREE||cc.t===T.RUBBLE) clear++; continue; }
+    if(isTrans && cc.t===T.WATER) continue;
+    // 分區/建築腳下的電線自動拆除(交通類走上方交叉邏輯,不在此處理)
+    if(city.autoDoze && !isTrans && cc.t===T.WIRE && !cc.br){ wires++; clear++; continue; }
+    return false;
   }
   if(t===T.PORT){
     let nearWater=false;
@@ -356,7 +375,7 @@ function place(tool, x, y){
     }
     if(!nearWater){ toast('海港必須緊鄰水域。'); return false; }
   }
-  const cost = onWater ? tl.pr*5 : tl.pr;
+  const cost = (onWater ? tl.pr*5 : tl.pr) + clear;
   if(city.funds < cost){ toast(onWater?'橋梁造價為 5 倍,資金不足!':'資金不足!'); sfx('deny'); return false; }
   city.funds -= cost;
   for(let i=0;i<w;i++)for(let j=0;j<w;j++){
@@ -366,6 +385,7 @@ function place(tool, x, y){
     c.br = isTrans && wasWater; c.wr=false;
   }
   computePower();
+  if(wires) toast(`⚡ 自動推土機拆除了 ${wires} 格電線,注意電網連通!`);
   sfx('build'); dirty=true; updateHUD();
   return true;
 }
@@ -744,7 +764,7 @@ function triggerDisaster(kind, auto){
   if(kind==='fire'){
     for(let tries=0;tries<80;tries++){
       const [x,y]=randTile();
-      if(flammable(G[x][y].t)){ igniteCell(x,y); toast('🔥 火災爆發!'); break; }
+      if(flammable(G[x][y].t)){ igniteCell(x,y); disasterAlert('🔥 火災爆發!',x,y); break; }
     }
   }
   if(kind==='flood'){
@@ -754,17 +774,19 @@ function triggerDisaster(kind, auto){
       for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])
         if(G[x+dx][y+dy].t!==T.WATER) cand.push([x+dx,y+dy]);
     }
-    let n=Math.min(45,cand.length);
+    let n=Math.min(45,cand.length), fx=-1, fy=-1;
     while(n-->0){
       const [x,y]=cand[Math.floor(Math.random()*cand.length)];
+      if(fx<0){ fx=x; fy=y; }
       const c=G[x][y]; c.t=c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.rl=false; c.lvl=0; c.ax=-1; c.ay=-1;
     }
-    toast('🌊 洪水氾濫!沿岸地區受災。');
+    if(fx>=0) disasterAlert('🌊 洪水氾濫!沿岸地區受災。',fx,fy);
+    else disasterAlert('🌊 洪水氾濫!沿岸地區受災。');
   }
   if(kind==='tornado'){
     const [x,y]=randTile();
     tornadoE={x, z:y, vx:(Math.random()-0.5), vz:(Math.random()-0.5), life:38, step:0};
-    toast('🌪 龍捲風登陸!');
+    disasterAlert('🌪 龍捲風登陸!',x,y);
   }
   if(kind==='quake'){
     let n=90;
@@ -775,14 +797,15 @@ function triggerDisaster(kind, auto){
       else { if(isBigB(c.t)){c.ax=-1;c.ay=-1;} c.t=c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.rl=false; c.lvl=0; }
     }
     quake=1.4;
-    toast('🫨 大地震!全市受創。');
+    disasterAlert('🫨 大地震!全市受創。');   // 全市範圍,鏡頭不跳轉
   }
   if(kind==='monster'){
     // 從邊緣出現,走向污染最高處
     let best=0, bx=N/2, by=N/2;
     for(let i=0;i<N*N;i++) if(city.pollution[i]>best){best=city.pollution[i];bx=(i/N)|0;by=i%N;}
-    monsterE={x:0, z:Math.floor(Math.random()*N), tx:bx, tz:by, life:110, step:0, ph:0};
-    toast('🦖 巨獸從水域現身,朝工業區前進!');
+    const mz=Math.floor(Math.random()*N);
+    monsterE={x:0, z:mz, tx:bx, tz:by, life:110, step:0, ph:0};
+    disasterAlert('🦖 巨獸從水域現身,朝工業區前進!',0,mz);
   }
   if(kind==='crash'){
     const [x,y]=randTile();
@@ -792,10 +815,8 @@ function triggerDisaster(kind, auto){
       if(c.t===T.WATER) continue;
       if(flammable(c.t)||c.t===T.GRASS){ igniteCell(x+i,y+j); }
     }
-    toast('✈️💥 飛機失事墜毀!');
+    disasterAlert('✈️💥 飛機失事墜毀!',x,y);
   }
-  if(!auto) sfx('alarm');
-  else sfx('alarm');
   computePower();
   dirty=true;
 }
@@ -844,6 +865,7 @@ const BOX_CAP=34000, CONE_CAP=9000, CYL_CAP=5000, CAR_CAP=140, GROUND_CAP=N*N*2;
 let dirty=true, groundDirty=true;
 let quake=0;
 let overlay='none';         // none|power|pollution|crime|landv|traffic
+let ovShowBldg=false;       // 圖層開啟時是否仍畫立體建築(預設壓扁成色塊)
 const _d=new THREE.Object3D(), _c=new THREE.Color();
 
 const wx = x => (x - N/2)*TILE + TILE/2;
@@ -1043,12 +1065,16 @@ const ROOFCOL=[0xc0574a,0x7d6b5d,0x5f7d8c,0xa8703f];
 function rebuildCity(){
   boxN=0; coneN=0; cylN=0;
   const seasonNoOverlay = overlay==='none';
+  // 圖層檢視:建築壓扁成半格高色塊(道路/鐵路/電線照畫,供對照電網)
+  const flat = overlay!=='none' && !ovShowBldg;
+  const pFlat=(c,X,Z,col)=>{ if(c.lvl>0) pBox(X,0.31,Z,TILE*0.84,0.5,TILE*0.84,col,0); };
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
     const c=G[x][y];
     const X=wx(x), Z=wz(y);
     const vr=c.v;
     switch(c.t){
       case T.TREE:
+        if(flat) break;
         pCyl(X,0.45,Z,0.16,0.9,0x6d4c33);
         pCone(X,1.6,Z,1.15,2.3,vr<0.5?0x3e7c47:0x4f9152, vr*3);
         if(vr>0.72) pCone(X+1.1,1.1,Z-0.8,0.8,1.6,0x3a7343, vr*5);
@@ -1056,11 +1082,12 @@ function rebuildCity(){
       case T.ROAD: drawRoadDeco(x,y,X,Z); if(c.rl) drawRail(x,y,X,Z,true); break;
       case T.RAIL: drawRail(x,y,X,Z); break;
       case T.WIRE: drawWire(x,y,X,Z,c.pow); break;
-      case T.RES: drawRes(c,X,Z); break;
-      case T.COM: drawCom(c,X,Z); break;
-      case T.IND: drawInd(c,X,Z); break;
+      case T.RES: if(flat) pFlat(c,X,Z,0x4cc36b); else drawRes(c,X,Z); break;
+      case T.COM: if(flat) pFlat(c,X,Z,0x4d9de0); else drawCom(c,X,Z); break;
+      case T.IND: if(flat) pFlat(c,X,Z,0xe8c14a); else drawInd(c,X,Z); break;
       case T.PARK:
         pBox(X,0.06,Z,TILE*0.96,0.12,TILE*0.96,0x5c9e57);
+        if(flat) break;
         pCyl(X-0.9,0.4,Z+0.7,0.13,0.8,0x6d4c33);
         pCone(X-0.9,1.35,Z+0.7,0.9,1.7,0x4f9152,vr*4);
         pCyl(X+1,0.4,Z-0.8,0.13,0.8,0x6d4c33);
@@ -1080,7 +1107,12 @@ function rebuildCity(){
     // 道路/鐵路上的交叉電線
     if(c.wr) drawWire(x,y,X,Z,c.pow);
     // 大建築只在錨點畫一次
-    if(isBigB(c.t) && c.ax===x && c.ay===y) drawBig(c,x,y);
+    if(isBigB(c.t) && c.ax===x && c.ay===y){
+      if(flat){
+        const w=BSPEC[c.t].w, cx=X+(w-1)*TILE/2, cz=Z+(w-1)*TILE/2;
+        pBox(cx,0.31,cz,w*TILE*0.92,0.5,w*TILE*0.92,0x9aa2ac,0);
+      } else drawBig(c,x,y);
+    }
     // 停電閃爍標記(無覆蓋圖時)
     if(seasonNoOverlay && (isZone(c.t)&&c.lvl>0 || (isBigB(c.t)&&c.ax===x&&c.ay===y)) && !c.pow
        && c.t!==T.COAL && c.t!==T.NUKE){
@@ -1647,6 +1679,7 @@ function showCursor(x,y){
       if(!inB(x+i,y+j)){ ok=false; continue; }
       const cc=G[x+i][y+j];
       const legal = buildable(cc) || (isTrans && cc.t===T.WATER) ||
+        (city.autoDoze && !isTrans && cc.t===T.WIRE && !cc.br) ||
         (t===T.WIRE && (cc.t===T.ROAD||cc.t===T.RAIL) && !cc.br && !cc.wr && !cc.rl) ||
         ((t===T.ROAD||t===T.RAIL) && cc.t===T.WIRE && !cc.br) ||
         (t===T.RAIL && cc.t===T.ROAD && !cc.br && !cc.wr && !cc.rl) ||
@@ -1755,12 +1788,25 @@ function buildToolbar(){
   for(const tl of TOOLS){
     if(tl.grp){ const d=document.createElement('div'); d.className='toolgroup'; d.textContent=tl.grp; bar.appendChild(d); continue; }
     const b=document.createElement('button');
+    if(tl.tg){   // 開關型(自動推土機):切換狀態,不改變目前工具
+      b.className='tool'+(city.autoDoze?' sel':'');
+      b.dataset.tg='1';
+      b.innerHTML=`<span class="ic">${tl.ic}</span><span class="nm">${tl.nm}</span><span class="pr">${city.autoDoze?'開':'關'}</span>`;
+      b.addEventListener('click', ()=>{
+        city.autoDoze=!city.autoDoze;
+        b.classList.toggle('sel',city.autoDoze);
+        b.querySelector('.pr').textContent=city.autoDoze?'開':'關';
+        toast(city.autoDoze?'♻️ 自動推土機:開啟(施工自動清除樹林/瓦礫,每格 $1)。':'♻️ 自動推土機:關閉(需先手動推平)。');
+      });
+      bar.appendChild(b);
+      continue;
+    }
     b.className='tool'+(tl.id===curTool?' sel':'');
     b.dataset.id=tl.id;
     b.innerHTML=`<span class="ic">${tl.ic}</span><span class="nm">${tl.nm}</span><span class="pr">${tl.pr?'$'+tl.pr:'免費'}</span>`;
     b.addEventListener('click', ()=>{
       curTool=tl.id;
-      document.querySelectorAll('.tool').forEach(el=>el.classList.toggle('sel',el.dataset.id===tl.id));
+      document.querySelectorAll('.tool').forEach(el=>{ if(!el.dataset.tg) el.classList.toggle('sel',el.dataset.id===tl.id); });
       hideQuery();
       lastPaint=null;
     });
@@ -1791,6 +1837,21 @@ function toast(msg){
   toastQ.push(msg);
   if(toastQ.length>4) toastQ.shift();
   $('#tickerText').textContent=toastQ[toastQ.length-1];
+}
+
+/* 災難警報:紅色橫幅 + 訊息帶 + 警報音;鳥瞰時鏡頭跳往災點 */
+function disasterAlert(msg, x, y){
+  toast(msg);
+  const el=$('#alert');
+  el.textContent=msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>el.classList.remove('show'), 5000);
+  sfx('alarm');
+  if(x!==undefined && mode==='bird'){
+    bird.tx=wx(x); bird.tz=wz(y);
+    updateBirdCam();
+  }
 }
 
 /* 查詢泡泡 */
@@ -1859,13 +1920,16 @@ function openMaps(){
   const m=openModal(`<h2>城市圖層</h2><div class="sub">以顏色檢視全市統計</div>
     <div class="dlist">${OVERLAYS.map(([k,n])=>`<button data-k="${k}">${n}<span>${overlay===k?'●':''}</span></button>`).join('')}</div>`);
   m.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{
-    overlay=b.dataset.k; groundDirty=true; closeModal();
+    overlay=b.dataset.k; dirty=true; closeModal();
     const lg=$('#legend');
     if(overlay==='none'){ lg.style.display='none'; }
     else {
       const name=OVERLAYS.find(o=>o[0]===overlay)[1];
-      lg.innerHTML=`<b>${name}</b><br>${overlay==='power'?'綠=供電 紅=停電':overlay==='landv'?'亮藍=高價值':'綠=低 紅=高'}`;
+      lg.innerHTML=`<b>${name}</b><br>${overlay==='power'?'綠=供電 紅=停電':overlay==='landv'?'亮藍=高價值':'綠=低 紅=高'}
+        <label style="display:flex;align-items:center;gap:6px;margin-top:7px;cursor:pointer;color:var(--dim)">
+        <input type="checkbox" id="bldgChk" ${ovShowBldg?'checked':''}> 顯示立體建築</label>`;
       lg.style.display='block';
+      $('#bldgChk').onchange=e=>{ ovShowBldg=e.target.checked; dirty=true; };
     }
   });
 }
@@ -1925,7 +1989,7 @@ function openNewCity(first){
     overlay='none'; $('#legend').style.display='none';
     if(mode==='walk') toggleView();
     bird.tx=0; bird.tz=0; bird.dist=150; updateBirdCam();
-    dirty=true; updateHUD(); closeModal();
+    dirty=true; updateHUD(); buildToolbar(); closeModal();
     saveCity();
     toast(`「${nm}」奠基於 1900 年。祝施政順利,市長!`);
   };
@@ -1957,7 +2021,7 @@ function openNewCity(first){
         overlay='none'; $('#legend').style.display='none';
         if(mode==='walk') toggleView();
         bird.tx=0; bird.tz=0; bird.dist=150; updateBirdCam();
-        dirty=true; updateHUD(); closeModal();
+        dirty=true; updateHUD(); buildToolbar(); closeModal();
         toast(`已匯入「${city.name}」(${city.year} 年)。`);
       });
     };

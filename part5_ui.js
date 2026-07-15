@@ -8,12 +8,25 @@ function buildToolbar(){
   for(const tl of TOOLS){
     if(tl.grp){ const d=document.createElement('div'); d.className='toolgroup'; d.textContent=tl.grp; bar.appendChild(d); continue; }
     const b=document.createElement('button');
+    if(tl.tg){   // 開關型(自動推土機):切換狀態,不改變目前工具
+      b.className='tool'+(city.autoDoze?' sel':'');
+      b.dataset.tg='1';
+      b.innerHTML=`<span class="ic">${tl.ic}</span><span class="nm">${tl.nm}</span><span class="pr">${city.autoDoze?'開':'關'}</span>`;
+      b.addEventListener('click', ()=>{
+        city.autoDoze=!city.autoDoze;
+        b.classList.toggle('sel',city.autoDoze);
+        b.querySelector('.pr').textContent=city.autoDoze?'開':'關';
+        toast(city.autoDoze?'♻️ 自動推土機:開啟(施工自動清除樹林/瓦礫,每格 $1)。':'♻️ 自動推土機:關閉(需先手動推平)。');
+      });
+      bar.appendChild(b);
+      continue;
+    }
     b.className='tool'+(tl.id===curTool?' sel':'');
     b.dataset.id=tl.id;
     b.innerHTML=`<span class="ic">${tl.ic}</span><span class="nm">${tl.nm}</span><span class="pr">${tl.pr?'$'+tl.pr:'免費'}</span>`;
     b.addEventListener('click', ()=>{
       curTool=tl.id;
-      document.querySelectorAll('.tool').forEach(el=>el.classList.toggle('sel',el.dataset.id===tl.id));
+      document.querySelectorAll('.tool').forEach(el=>{ if(!el.dataset.tg) el.classList.toggle('sel',el.dataset.id===tl.id); });
       hideQuery();
       lastPaint=null;
     });
@@ -44,6 +57,21 @@ function toast(msg){
   toastQ.push(msg);
   if(toastQ.length>4) toastQ.shift();
   $('#tickerText').textContent=toastQ[toastQ.length-1];
+}
+
+/* 災難警報:紅色橫幅 + 訊息帶 + 警報音;鳥瞰時鏡頭跳往災點 */
+function disasterAlert(msg, x, y){
+  toast(msg);
+  const el=$('#alert');
+  el.textContent=msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>el.classList.remove('show'), 5000);
+  sfx('alarm');
+  if(x!==undefined && mode==='bird'){
+    bird.tx=wx(x); bird.tz=wz(y);
+    updateBirdCam();
+  }
 }
 
 /* 查詢泡泡 */
@@ -112,13 +140,16 @@ function openMaps(){
   const m=openModal(`<h2>城市圖層</h2><div class="sub">以顏色檢視全市統計</div>
     <div class="dlist">${OVERLAYS.map(([k,n])=>`<button data-k="${k}">${n}<span>${overlay===k?'●':''}</span></button>`).join('')}</div>`);
   m.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{
-    overlay=b.dataset.k; groundDirty=true; closeModal();
+    overlay=b.dataset.k; dirty=true; closeModal();
     const lg=$('#legend');
     if(overlay==='none'){ lg.style.display='none'; }
     else {
       const name=OVERLAYS.find(o=>o[0]===overlay)[1];
-      lg.innerHTML=`<b>${name}</b><br>${overlay==='power'?'綠=供電 紅=停電':overlay==='landv'?'亮藍=高價值':'綠=低 紅=高'}`;
+      lg.innerHTML=`<b>${name}</b><br>${overlay==='power'?'綠=供電 紅=停電':overlay==='landv'?'亮藍=高價值':'綠=低 紅=高'}
+        <label style="display:flex;align-items:center;gap:6px;margin-top:7px;cursor:pointer;color:var(--dim)">
+        <input type="checkbox" id="bldgChk" ${ovShowBldg?'checked':''}> 顯示立體建築</label>`;
       lg.style.display='block';
+      $('#bldgChk').onchange=e=>{ ovShowBldg=e.target.checked; dirty=true; };
     }
   });
 }
@@ -178,7 +209,7 @@ function openNewCity(first){
     overlay='none'; $('#legend').style.display='none';
     if(mode==='walk') toggleView();
     bird.tx=0; bird.tz=0; bird.dist=150; updateBirdCam();
-    dirty=true; updateHUD(); closeModal();
+    dirty=true; updateHUD(); buildToolbar(); closeModal();
     saveCity();
     toast(`「${nm}」奠基於 1900 年。祝施政順利,市長!`);
   };
@@ -210,7 +241,7 @@ function openNewCity(first){
         overlay='none'; $('#legend').style.display='none';
         if(mode==='walk') toggleView();
         bird.tx=0; bird.tz=0; bird.dist=150; updateBirdCam();
-        dirty=true; updateHUD(); closeModal();
+        dirty=true; updateHUD(); buildToolbar(); closeModal();
         toast(`已匯入「${city.name}」(${city.year} 年)。`);
       });
     };

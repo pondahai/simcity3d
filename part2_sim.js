@@ -22,6 +22,7 @@ const TNAME = {0:'草地',1:'水域',2:'樹林',3:'道路',4:'鐵路',5:'電線'
 const TOOLS = [
   {id:'query', ic:'🔍', nm:'查詢',   pr:0},
   {id:'doze',  ic:'🚜', nm:'推土機', pr:1},
+  {id:'autodoze', ic:'♻️', nm:'自動推土', tg:true},
   {grp:'交通'},
   {id:'road',  ic:'🛣️', nm:'道路',   pr:10,  t:T.ROAD},
   {id:'rail',  ic:'🛤️', nm:'鐵路',   pr:20,  t:T.RAIL},
@@ -67,7 +68,7 @@ function newCity(name, funds){
     demR:0.6, demC:0, demI:0.4, ext:20,
     fundRoad:1, fundPolice:1, fundFire:1,
     lastIncome:0, lastExpense:0,
-    autoDisaster:true, milestones:{},
+    autoDisaster:true, autoDoze:true, milestones:{},
     powerOK:true, title:'拓荒地',
   };
   genTerrain();
@@ -119,7 +120,8 @@ function genTerrain(){
 const isZone = t => t===T.RES||t===T.COM||t===T.IND;
 const isBigB = t => BSPEC[t]!==undefined;
 const flammable = t => isZone(t)||t===T.TREE||isBigB(t)||t===T.PARK;
-const buildable = c => c.t===T.GRASS || c.t===T.TREE;
+/* 自動推土機開啟時,樹林/瓦礫可直接施工覆蓋(每格加收 $1 清除費) */
+const buildable = c => c.t===T.GRASS || (city.autoDoze && (c.t===T.TREE || c.t===T.RUBBLE));
 
 function toolCost(tl){ return tl.pr; }
 
@@ -158,9 +160,14 @@ function place(tool, x, y){
     return true;
   }
   const onWater = isTrans && G[x][y].t===T.WATER;   // 跨河橋
+  let clear=0, wires=0;   // 自動推土:清除費與拆除電線數
   for(let i=0;i<w;i++)for(let j=0;j<w;j++){
     const cc=G[x+i][y+j];
-    if(!(buildable(cc) || (isTrans && cc.t===T.WATER))) return false;
+    if(buildable(cc)){ if(cc.t===T.TREE||cc.t===T.RUBBLE) clear++; continue; }
+    if(isTrans && cc.t===T.WATER) continue;
+    // 分區/建築腳下的電線自動拆除(交通類走上方交叉邏輯,不在此處理)
+    if(city.autoDoze && !isTrans && cc.t===T.WIRE && !cc.br){ wires++; clear++; continue; }
+    return false;
   }
   if(t===T.PORT){
     let nearWater=false;
@@ -169,7 +176,7 @@ function place(tool, x, y){
     }
     if(!nearWater){ toast('海港必須緊鄰水域。'); return false; }
   }
-  const cost = onWater ? tl.pr*5 : tl.pr;
+  const cost = (onWater ? tl.pr*5 : tl.pr) + clear;
   if(city.funds < cost){ toast(onWater?'橋梁造價為 5 倍,資金不足!':'資金不足!'); sfx('deny'); return false; }
   city.funds -= cost;
   for(let i=0;i<w;i++)for(let j=0;j<w;j++){
@@ -179,6 +186,7 @@ function place(tool, x, y){
     c.br = isTrans && wasWater; c.wr=false;
   }
   computePower();
+  if(wires) toast(`⚡ 自動推土機拆除了 ${wires} 格電線,注意電網連通!`);
   sfx('build'); dirty=true; updateHUD();
   return true;
 }
@@ -557,7 +565,7 @@ function triggerDisaster(kind, auto){
   if(kind==='fire'){
     for(let tries=0;tries<80;tries++){
       const [x,y]=randTile();
-      if(flammable(G[x][y].t)){ igniteCell(x,y); toast('🔥 火災爆發!'); break; }
+      if(flammable(G[x][y].t)){ igniteCell(x,y); disasterAlert('🔥 火災爆發!',x,y); break; }
     }
   }
   if(kind==='flood'){
@@ -567,17 +575,19 @@ function triggerDisaster(kind, auto){
       for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]])
         if(G[x+dx][y+dy].t!==T.WATER) cand.push([x+dx,y+dy]);
     }
-    let n=Math.min(45,cand.length);
+    let n=Math.min(45,cand.length), fx=-1, fy=-1;
     while(n-->0){
       const [x,y]=cand[Math.floor(Math.random()*cand.length)];
+      if(fx<0){ fx=x; fy=y; }
       const c=G[x][y]; c.t=c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.rl=false; c.lvl=0; c.ax=-1; c.ay=-1;
     }
-    toast('🌊 洪水氾濫!沿岸地區受災。');
+    if(fx>=0) disasterAlert('🌊 洪水氾濫!沿岸地區受災。',fx,fy);
+    else disasterAlert('🌊 洪水氾濫!沿岸地區受災。');
   }
   if(kind==='tornado'){
     const [x,y]=randTile();
     tornadoE={x, z:y, vx:(Math.random()-0.5), vz:(Math.random()-0.5), life:38, step:0};
-    toast('🌪 龍捲風登陸!');
+    disasterAlert('🌪 龍捲風登陸!',x,y);
   }
   if(kind==='quake'){
     let n=90;
@@ -588,14 +598,15 @@ function triggerDisaster(kind, auto){
       else { if(isBigB(c.t)){c.ax=-1;c.ay=-1;} c.t=c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.rl=false; c.lvl=0; }
     }
     quake=1.4;
-    toast('🫨 大地震!全市受創。');
+    disasterAlert('🫨 大地震!全市受創。');   // 全市範圍,鏡頭不跳轉
   }
   if(kind==='monster'){
     // 從邊緣出現,走向污染最高處
     let best=0, bx=N/2, by=N/2;
     for(let i=0;i<N*N;i++) if(city.pollution[i]>best){best=city.pollution[i];bx=(i/N)|0;by=i%N;}
-    monsterE={x:0, z:Math.floor(Math.random()*N), tx:bx, tz:by, life:110, step:0, ph:0};
-    toast('🦖 巨獸從水域現身,朝工業區前進!');
+    const mz=Math.floor(Math.random()*N);
+    monsterE={x:0, z:mz, tx:bx, tz:by, life:110, step:0, ph:0};
+    disasterAlert('🦖 巨獸從水域現身,朝工業區前進!',0,mz);
   }
   if(kind==='crash'){
     const [x,y]=randTile();
@@ -605,10 +616,8 @@ function triggerDisaster(kind, auto){
       if(c.t===T.WATER) continue;
       if(flammable(c.t)||c.t===T.GRASS){ igniteCell(x+i,y+j); }
     }
-    toast('✈️💥 飛機失事墜毀!');
+    disasterAlert('✈️💥 飛機失事墜毀!',x,y);
   }
-  if(!auto) sfx('alarm');
-  else sfx('alarm');
   computePower();
   dirty=true;
 }
