@@ -42,6 +42,9 @@ function updateHUD(){
   $('#vDate').textContent = `${city.year}年 ${city.month+1}月`;
   $('#vName').textContent = `${city.name}・${city.title}`;
   setBar('#barR',city.demR); setBar('#barC',city.demC); setBar('#barI',city.demI);
+  const np=city.unpowered|0, pw=$('#pwrWarn');
+  pw.style.display = np>0 ? 'flex' : 'none';
+  if(np>0) pw.textContent = `⚡ ${np} 格缺電`;
 }
 function setBar(sel,v){
   const el=$(sel);
@@ -139,8 +142,10 @@ const OVERLAYS=[['none','🏙 一般檢視'],['power','⚡ 電力網'],['polluti
 function openMaps(){
   const m=openModal(`<h2>城市圖層</h2><div class="sub">以顏色檢視全市統計</div>
     <div class="dlist">${OVERLAYS.map(([k,n])=>`<button data-k="${k}">${n}<span>${overlay===k?'●':''}</span></button>`).join('')}</div>`);
-  m.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{
-    overlay=b.dataset.k; dirty=true; closeModal();
+  m.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{ closeModal(); setOverlay(b.dataset.k); });
+}
+function setOverlay(k){
+    overlay=k; dirty=true;
     const lg=$('#legend');
     if(overlay==='none'){ lg.style.display='none'; }
     else {
@@ -151,7 +156,6 @@ function openMaps(){
       lg.style.display='block';
       $('#bldgChk').onchange=e=>{ ovShowBldg=e.target.checked; dirty=true; };
     }
-  });
 }
 
 /* 災難 */
@@ -338,6 +342,10 @@ function loop(t){
     monsterG.position.set(wx(Math.round(monsterE.x)), Math.abs(Math.sin(t*0.008))*0.6, wz(Math.round(monsterE.z)));
     monsterG.rotation.y = Math.atan2(monsterE.tx-monsterE.x, monsterE.tz-monsterE.z);
   } else monsterG.visible=false;
+
+  // 缺電標記:上下浮動 + 閃爍
+  warnMesh.position.y = Math.sin(t*0.004)*0.35;
+  warnMesh.visible = Math.sin(t*0.009) > -0.35;
 
   // 地震震動
   if(quake>0){

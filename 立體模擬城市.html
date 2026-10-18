@@ -28,6 +28,9 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 .tb-cell .val{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--amber2);white-space:nowrap}
 #cityname .val{color:var(--ink)}
 /* RCI 需求柱 */
+#pwrWarn{display:none;align-items:center;padding:0 12px;border-right:1px solid var(--line);
+  color:#fff;background:#b8332b;font-weight:700;cursor:pointer;white-space:nowrap;animation:pwrPulse 1.1s infinite}
+@keyframes pwrPulse{50%{background:#e05d5d}}
 #rci{display:flex;align-items:center;gap:7px;padding:6px 12px;border-right:1px solid var(--line)}
 .rcicol{display:flex;flex-direction:column;align-items:center;gap:2px}
 .rcitrack{width:12px;height:30px;background:#0b1119;border:1px solid var(--line);position:relative;border-radius:2px;overflow:hidden}
@@ -147,6 +150,7 @@ input[type=range]{width:100%;accent-color:var(--amber)}
   <div class="tb-cell"><span class="lab">資金</span><span class="val" id="vFunds">$20,000</span></div>
   <div class="tb-cell"><span class="lab">人口</span><span class="val" id="vPop">0</span></div>
   <div class="tb-cell"><span class="lab">日期</span><span class="val" id="vDate">1900年 1月</span></div>
+  <div id="pwrWarn" title="點擊開啟電力網圖層" onclick="setOverlay('power')">⚡ 0 格缺電</div>
   <div id="rci" title="RCI 需求">
     <div class="rcicol"><div class="rcitrack"><div class="rcibar" id="barR"></div><div class="rcizero"></div></div><span>住</span></div>
     <div class="rcicol"><div class="rcitrack"><div class="rcibar" id="barC"></div><div class="rcizero"></div></div><span>商</span></div>
@@ -464,6 +468,14 @@ function computePower(){
     }
   }
   city.powerOK = anyPlant && !blackout;
+  let np=0;   // 缺電格數(分區格 + 大建築錨點,電廠除外)
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const c=G[x][y];
+    if(c.pow || c.t===T.COAL || c.t===T.NUKE) continue;
+    if(isZone(c.t) || (isBigB(c.t)&&c.ax===x&&c.ay===y)) np++;
+  }
+  city.unpowered=np;
+  if(typeof updateHUD==='function' && document.getElementById('pwrWarn')) updateHUD();
   return blackout;
 }
 
@@ -944,6 +956,10 @@ function initGL(){
   coneMesh   = makeInst(new THREE.ConeGeometry(0.7,1,4), CONE_CAP);
   cylMesh    = makeInst(new THREE.CylinderGeometry(0.5,0.62,1,8), CYL_CAP);
   carMesh    = makeInst(new THREE.BoxGeometry(1.3,0.62,0.72), CAR_CAP);
+  // 缺電警示:不受光照的亮紅菱形,在 loop 裡浮動閃爍
+  warnMesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.75),
+    new THREE.MeshBasicMaterial({color:0xff3b30}), N*N);
+  warnMesh.count=0; warnMesh.frustumCulled=false; scene.add(warnMesh);
 
   // 邊界基座(城市浮島感)
   const base = new THREE.Mesh(
@@ -964,7 +980,7 @@ function initGL(){
     camBird.updateProjectionMatrix(); camWalk.updateProjectionMatrix();
   });
 }
-let tornadoMesh=null, monsterG=null, instMat=null;
+let tornadoMesh=null, monsterG=null, instMat=null, warnMesh=null, warnN=0;
 function buildMonster(){
   const g=new THREE.Group();
   const red=new THREE.MeshBasicMaterial({color:0xa8362b});
@@ -1064,7 +1080,7 @@ const RESWALL=[0xf2e7d5,0xe8d9c3,0xf5efe0,0xdcd0bb];
 const ROOFCOL=[0xc0574a,0x7d6b5d,0x5f7d8c,0xa8703f];
 
 function rebuildCity(){
-  boxN=0; coneN=0; cylN=0;
+  boxN=0; coneN=0; cylN=0; warnN=0;
   const seasonNoOverlay = overlay==='none';
   // 圖層檢視:建築壓扁成半格高色塊(道路/鐵路/電線照畫,供對照電網)
   const flat = overlay!=='none' && !ovShowBldg;
@@ -1115,12 +1131,16 @@ function rebuildCity(){
       } else drawBig(c,x,y);
     }
     // 停電閃爍標記(無覆蓋圖時)
-    if(seasonNoOverlay && (isZone(c.t)&&c.lvl>0 || (isBigB(c.t)&&c.ax===x&&c.ay===y)) && !c.pow
+    if(seasonNoOverlay && (isZone(c.t) || (isBigB(c.t)&&c.ax===x&&c.ay===y)) && !c.pow
        && c.t!==T.COAL && c.t!==T.NUKE){
-      pCone(X, zoneH(c)+2.2, Z, 0.55, 1.1, 0xffe14d, Math.PI/4);
+      const w=isBigB(c.t)?BSPEC[c.t].w:1, off=(w-1)*TILE/2;
+      _d.position.set(X+off, zoneH(c)+(isBigB(c.t)?5:2.6), Z+off);
+      _d.scale.set(1,1.5,1); _d.rotation.set(0,0,0); _d.updateMatrix();
+      warnMesh.setMatrixAt(warnN++, _d.matrix);
     }
   }
   flushInst(boxMesh, boxN);
+  warnMesh.count=warnN; warnMesh.instanceMatrix.needsUpdate=true;
   flushInst(coneMesh, coneN);
   flushInst(cylMesh, cylN);
   dirty=false;
@@ -1836,6 +1856,9 @@ function updateHUD(){
   $('#vDate').textContent = `${city.year}年 ${city.month+1}月`;
   $('#vName').textContent = `${city.name}・${city.title}`;
   setBar('#barR',city.demR); setBar('#barC',city.demC); setBar('#barI',city.demI);
+  const np=city.unpowered|0, pw=$('#pwrWarn');
+  pw.style.display = np>0 ? 'flex' : 'none';
+  if(np>0) pw.textContent = `⚡ ${np} 格缺電`;
 }
 function setBar(sel,v){
   const el=$(sel);
@@ -1933,8 +1956,10 @@ const OVERLAYS=[['none','🏙 一般檢視'],['power','⚡ 電力網'],['polluti
 function openMaps(){
   const m=openModal(`<h2>城市圖層</h2><div class="sub">以顏色檢視全市統計</div>
     <div class="dlist">${OVERLAYS.map(([k,n])=>`<button data-k="${k}">${n}<span>${overlay===k?'●':''}</span></button>`).join('')}</div>`);
-  m.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{
-    overlay=b.dataset.k; dirty=true; closeModal();
+  m.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{ closeModal(); setOverlay(b.dataset.k); });
+}
+function setOverlay(k){
+    overlay=k; dirty=true;
     const lg=$('#legend');
     if(overlay==='none'){ lg.style.display='none'; }
     else {
@@ -1945,7 +1970,6 @@ function openMaps(){
       lg.style.display='block';
       $('#bldgChk').onchange=e=>{ ovShowBldg=e.target.checked; dirty=true; };
     }
-  });
 }
 
 /* 災難 */
@@ -2132,6 +2156,10 @@ function loop(t){
     monsterG.position.set(wx(Math.round(monsterE.x)), Math.abs(Math.sin(t*0.008))*0.6, wz(Math.round(monsterE.z)));
     monsterG.rotation.y = Math.atan2(monsterE.tx-monsterE.x, monsterE.tz-monsterE.z);
   } else monsterG.visible=false;
+
+  // 缺電標記:上下浮動 + 閃爍
+  warnMesh.position.y = Math.sin(t*0.004)*0.35;
+  warnMesh.visible = Math.sin(t*0.009) > -0.35;
 
   // 地震震動
   if(quake>0){

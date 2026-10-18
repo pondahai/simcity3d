@@ -84,6 +84,10 @@ function initGL(){
   coneMesh   = makeInst(new THREE.ConeGeometry(0.7,1,4), CONE_CAP);
   cylMesh    = makeInst(new THREE.CylinderGeometry(0.5,0.62,1,8), CYL_CAP);
   carMesh    = makeInst(new THREE.BoxGeometry(1.3,0.62,0.72), CAR_CAP);
+  // 缺電警示:不受光照的亮紅菱形,在 loop 裡浮動閃爍
+  warnMesh = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.75),
+    new THREE.MeshBasicMaterial({color:0xff3b30}), N*N);
+  warnMesh.count=0; warnMesh.frustumCulled=false; scene.add(warnMesh);
 
   // 邊界基座(城市浮島感)
   const base = new THREE.Mesh(
@@ -104,7 +108,7 @@ function initGL(){
     camBird.updateProjectionMatrix(); camWalk.updateProjectionMatrix();
   });
 }
-let tornadoMesh=null, monsterG=null, instMat=null;
+let tornadoMesh=null, monsterG=null, instMat=null, warnMesh=null, warnN=0;
 function buildMonster(){
   const g=new THREE.Group();
   const red=new THREE.MeshBasicMaterial({color:0xa8362b});
@@ -204,7 +208,7 @@ const RESWALL=[0xf2e7d5,0xe8d9c3,0xf5efe0,0xdcd0bb];
 const ROOFCOL=[0xc0574a,0x7d6b5d,0x5f7d8c,0xa8703f];
 
 function rebuildCity(){
-  boxN=0; coneN=0; cylN=0;
+  boxN=0; coneN=0; cylN=0; warnN=0;
   const seasonNoOverlay = overlay==='none';
   // 圖層檢視:建築壓扁成半格高色塊(道路/鐵路/電線照畫,供對照電網)
   const flat = overlay!=='none' && !ovShowBldg;
@@ -255,12 +259,16 @@ function rebuildCity(){
       } else drawBig(c,x,y);
     }
     // 停電閃爍標記(無覆蓋圖時)
-    if(seasonNoOverlay && (isZone(c.t)&&c.lvl>0 || (isBigB(c.t)&&c.ax===x&&c.ay===y)) && !c.pow
+    if(seasonNoOverlay && (isZone(c.t) || (isBigB(c.t)&&c.ax===x&&c.ay===y)) && !c.pow
        && c.t!==T.COAL && c.t!==T.NUKE){
-      pCone(X, zoneH(c)+2.2, Z, 0.55, 1.1, 0xffe14d, Math.PI/4);
+      const w=isBigB(c.t)?BSPEC[c.t].w:1, off=(w-1)*TILE/2;
+      _d.position.set(X+off, zoneH(c)+(isBigB(c.t)?5:2.6), Z+off);
+      _d.scale.set(1,1.5,1); _d.rotation.set(0,0,0); _d.updateMatrix();
+      warnMesh.setMatrixAt(warnN++, _d.matrix);
     }
   }
   flushInst(boxMesh, boxN);
+  warnMesh.count=warnN; warnMesh.instanceMatrix.needsUpdate=true;
   flushInst(coneMesh, coneN);
   flushInst(cylMesh, cylN);
   dirty=false;

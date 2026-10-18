@@ -265,6 +265,14 @@ function computePower(){
     }
   }
   city.powerOK = anyPlant && !blackout;
+  let np=0;   // 缺電格數(分區格 + 大建築錨點,電廠除外)
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const c=G[x][y];
+    if(c.pow || c.t===T.COAL || c.t===T.NUKE) continue;
+    if(isZone(c.t) || (isBigB(c.t)&&c.ax===x&&c.ay===y)) np++;
+  }
+  city.unpowered=np;
+  if(typeof updateHUD==='function' && document.getElementById('pwrWarn')) updateHUD();
   return blackout;
 }
 

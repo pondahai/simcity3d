@@ -28,6 +28,9 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 .tb-cell .val{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--amber2);white-space:nowrap}
 #cityname .val{color:var(--ink)}
 /* RCI 需求柱 */
+#pwrWarn{display:none;align-items:center;padding:0 12px;border-right:1px solid var(--line);
+  color:#fff;background:#b8332b;font-weight:700;cursor:pointer;white-space:nowrap;animation:pwrPulse 1.1s infinite}
+@keyframes pwrPulse{50%{background:#e05d5d}}
 #rci{display:flex;align-items:center;gap:7px;padding:6px 12px;border-right:1px solid var(--line)}
 .rcicol{display:flex;flex-direction:column;align-items:center;gap:2px}
 .rcitrack{width:12px;height:30px;background:#0b1119;border:1px solid var(--line);position:relative;border-radius:2px;overflow:hidden}
@@ -147,6 +150,7 @@ input[type=range]{width:100%;accent-color:var(--amber)}
   <div class="tb-cell"><span class="lab">資金</span><span class="val" id="vFunds">$20,000</span></div>
   <div class="tb-cell"><span class="lab">人口</span><span class="val" id="vPop">0</span></div>
   <div class="tb-cell"><span class="lab">日期</span><span class="val" id="vDate">1900年 1月</span></div>
+  <div id="pwrWarn" title="點擊開啟電力網圖層" onclick="setOverlay('power')">⚡ 0 格缺電</div>
   <div id="rci" title="RCI 需求">
     <div class="rcicol"><div class="rcitrack"><div class="rcibar" id="barR"></div><div class="rcizero"></div></div><span>住</span></div>
     <div class="rcicol"><div class="rcitrack"><div class="rcibar" id="barC"></div><div class="rcizero"></div></div><span>商</span></div>
