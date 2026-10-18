@@ -2,6 +2,7 @@
 let mode='bird';                       // bird | walk
 const bird = {tx:0, tz:0, yaw:Math.PI*0.25, pitch:0.9, dist:150};
 const walk = {x:0, z:0, yaw:0, pitch:0, speed:9};
+const EYE_H = 0.72;   // 人眼高度(車高 0.62≈1.5m → 1 單位≈2.4m,0.72≈1.7m)
 let curTool='query';
 let cursor=null;                        // 施工游標
 const keys={};
@@ -28,10 +29,10 @@ function updateBirdCam(){
 }
 function updateWalkCam(){
   walk.pitch=clamp(walk.pitch,-1.2,1.2);
-  camWalk.position.set(walk.x, 2.3, walk.z);
+  camWalk.position.set(walk.x, EYE_H, walk.z);
   const lx=walk.x+Math.cos(walk.yaw)*Math.cos(walk.pitch);
   const lz=walk.z+Math.sin(walk.yaw)*Math.cos(walk.pitch);
-  camWalk.lookAt(lx, 2.3+Math.sin(walk.pitch), lz);
+  camWalk.lookAt(lx, EYE_H+Math.sin(walk.pitch), lz);
 }
 
 /* 世界座標 → 地格 */

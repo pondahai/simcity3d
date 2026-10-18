@@ -29,7 +29,7 @@ function initGL(){
   scene.add(sun);
 
   camBird = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 1, 1200);
-  camWalk = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.3, 900);
+  camWalk = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.08, 900);
   activeCam = camBird;
 
   // 自訂 shader:逐實例顏色 aCol + 太陽/半球光 + 霧(完全繞開 r128 instanceColor 相容性問題)
