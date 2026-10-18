@@ -179,13 +179,14 @@ function openDisasters(){
 }
 
 /* 新城市 */
+const escHTML = s=>String(s).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 function openNewCity(first){
   let diff=20000;
   const m=openModal(`
     <h2>${first?'🏗 建立你的城市':'🆕 開拓新城市'}</h2>
     <div class="sub">完整復刻初代模擬城市 ・ 立體成像 ・ 雙視角</div>
     <div style="font-size:12px;color:var(--dim);margin-bottom:2px">城市名稱</div>
-    <input id="nameInput" maxlength="12" value="${first?'新市鎮':(city?city.name:'新市鎮')}">
+    <input id="nameInput" maxlength="12" value="${escHTML(first?'新市鎮':(city?city.name:'新市鎮'))}">
     <div style="font-size:12px;color:var(--dim)">難度(起始資金)</div>
     <div class="choice">
       <button data-f="20000" class="on">簡單<br>$20,000</button>
@@ -215,6 +216,7 @@ function openNewCity(first){
     bird.tx=0; bird.tz=0; bird.dist=150; updateBirdCam();
     dirty=true; updateHUD(); buildToolbar(); closeModal();
     saveCity();
+    if(first) setSpeed(1);   // 首次開局:建好城市才開始走時間
     toast(`「${nm}」奠基於 1900 年。祝施政順利,市長!`);
   };
   const cb=$('#cancelBtn'); if(cb) cb.onclick=closeModal;
@@ -279,10 +281,14 @@ let speed=1;
 const SPD_MS=[Infinity, 2400, 1100, 380];
 let simAcc=0, entAcc=0, lastT=0;
 
+function setSpeed(s){
+  speed=s;
+  document.querySelectorAll('[data-spd]').forEach(x=>x.classList.toggle('on',+x.dataset.spd===speed));
+}
+
 function bindUI(){
   document.querySelectorAll('[data-spd]').forEach(b=>b.onclick=()=>{
-    speed=+b.dataset.spd;
-    document.querySelectorAll('[data-spd]').forEach(x=>x.classList.toggle('on',+x.dataset.spd===speed));
+    setSpeed(+b.dataset.spd);
     toast(speed===0?'時間暫停。':'時間流速已調整。');
   });
   $('#viewBtn').onclick=toggleView;
@@ -349,9 +355,13 @@ function loop(t){
 
   // 地震震動
   if(quake>0){
+    if(mode==='bird') updateBirdCam();   // 每幀從基準位置抖動,避免位移累積
     quake=Math.max(0,quake-dt*0.7);
+    if(quake===0){ if(mode==='bird') updateBirdCam(); }
+    else {
     activeCam.position.x += (Math.random()-0.5)*quake*2.2;
     activeCam.position.y += (Math.random()-0.5)*quake*1.6;
+    }
   }
 
   if(mode==='walk') stepWalk(dt);
@@ -371,6 +381,7 @@ function boot(){
     newCity('新市鎮', 20000);
     initCameras(); initInput(); buildToolbar(); bindUI();
     updateHUD(); rebuildCity();
+    setSpeed(0);   // 開局彈窗期間暫停
     requestAnimationFrame(loop);
     openNewCity(true);
   }

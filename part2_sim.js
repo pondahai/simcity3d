@@ -259,7 +259,7 @@ function computePower(){
       let used=0;
       for(const [cx,cy] of comp){
         const cc=G[cx][cy];
-        if(cc.t===T.WIRE || cc.wr){ cc.pow=true; continue; }
+        if(cc.t===T.WIRE || cc.wr || cc.t===T.COAL || cc.t===T.NUKE){ cc.pow=true; continue; }   // 電廠自身不吃容量
         if(used<cap){ cc.pow=true; used++; } else blackout=true;
       }
     }
@@ -326,9 +326,15 @@ function computeStats(){
     const c=G[x][y];
     if(isZone(c.t)&&c.lvl>0) radial(tra,x,y,4,c.lvl*7);
   }
+  // 車流分攤:4 格內道路越多,每格道路負擔越低(多鋪路可紓解壅塞)
+  const rd=new Float32Array(N*N);
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const t=G[x][y].t; if(t===T.ROAD||t===T.RAIL) radial(rd,x,y,4,1);
+  }
+  for(let i=0;i<N*N;i++) tra[i]*=4/Math.max(2,rd[i]);
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
     const t=G[x][y].t, i=idx(x,y);
-    if(t===T.RAIL) tra[i]*=0.3;        // 鐵路運量大,壅塞僅為道路的 30%
+    if(t===T.RAIL) tra[i]*=0.3;       // 鐵路運量大,壅塞僅為道路的 30%
     else if(t!==T.ROAD) tra[i]*=0.25;
   }
 
@@ -430,9 +436,23 @@ function loadCity(s){
 }
 
 /* ── 每月模擬節拍 ── */
+const JAM_LO=120, JAM_HI=180;   // 道路交通量壅塞門檻(輕度/嚴重)
 function simMonth(){
   const blackout = computePower();
   const acc = computeAccess();
+  // 壅塞圖:道路交通量向外擴散 3 格(取最大值),涵蓋所有靠這些道路通勤的分區
+  let jamMap=new Float32Array(N*N);
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++) if(G[x][y].t===T.ROAD) jamMap[idx(x,y)]=city.traffic[idx(x,y)];
+  for(let p=0;p<3;p++){
+    const nx2=jamMap.slice();
+    for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+      let m=jamMap[idx(x,y)];
+      if(x>0)m=Math.max(m,jamMap[idx(x-1,y)]); if(x<N-1)m=Math.max(m,jamMap[idx(x+1,y)]);
+      if(y>0)m=Math.max(m,jamMap[idx(x,y-1)]); if(y<N-1)m=Math.max(m,jamMap[idx(x,y+1)]);
+      nx2[idx(x,y)]=m;
+    }
+    jamMap=nx2;
+  }
 
   // 分區生長/衰退
   let resSum=0, comSum=0, indSum=0;
@@ -440,9 +460,11 @@ function simMonth(){
     const c=G[x][y], i=idx(x,y);
     if(!isZone(c.t)) continue;
     const dem = c.t===T.RES?city.demR : c.t===T.COM?city.demC : city.demI;
-    const envBad = (city.pollution[i]>55?0.35:0) + (city.crime[i]>55?0.35:0);
+    const jam=jamMap[i];   // 交通壅塞:過高時抑制生長
+    const jamPen = jam>JAM_HI ? 0.2 : jam>JAM_LO ? 0.06 : 0;
+    const envBad = (city.pollution[i]>55?0.35:0) + (city.crime[i]>55?0.35:0) + jamPen;
     if(c.pow && acc[i] && dem>0 && c.lvl<5){
-      const p = 0.10 + dem*0.45 + (city.landv[i]>34?0.08:0) - envBad;
+      const p = 0.03 + dem*0.16 + (city.landv[i]>34?0.04:0) - envBad;
       if(Math.random()<p){ c.lvl++; c.tier=landTier(i,c.t); }
     } else if(!c.pow || dem<-0.25 || envBad>0.4){
       if(c.lvl>0 && Math.random() < (!c.pow?0.35:0.12)){ c.lvl--; c.tier=landTier(i,c.t); }
@@ -458,11 +480,11 @@ function simMonth(){
     const c=G[x][y];
     if(c.ax===x&&c.ay===y){ if(c.t===T.PORT)boost+=0.5; if(c.t===T.AIRPORT)boost+=0.7; }
   }
-  city.ext += 0.25*boost;
+  city.ext = Math.min(city.ext + 0.25*boost, 60*boost);   // 對外市場有上限,海港/機場提高天花板
 
   // RCI 需求
   const jobs = comSum+indSum;
-  const taxPen = (city.tax-7)*0.055;
+  const taxPen = (city.tax-7)*0.09;   // 高稅率明顯壓抑需求,形成取捨
   let stadiumBonus = 0;
   for(let x=0;x<N;x++)for(let y=0;y<N;y++)
     if(G[x][y].t===T.STADIUM&&G[x][y].ax===x&&G[x][y].ay===y) stadiumBonus=0.12;
@@ -505,14 +527,20 @@ function simMonth(){
   }
 
   // 財政(逐月)
-  const income = (resSum*1.0 + comSum*1.6 + indSum*1.6) * city.tax * 0.32;
-  let roads=0, rails=0, police=0, fire=0;
+  const income = (resSum*1.0 + comSum*1.6 + indSum*1.6) * city.tax * 0.1;
+  let roads=0, rails=0, police=0, fire=0, zones=0, plantCost=0;
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
     const c=G[x][y];
     if(c.t===T.ROAD){roads++; if(c.rl)rails++;} else if(c.t===T.RAIL)rails++;
-    if(c.ax===x&&c.ay===y){ if(c.t===T.POLICE)police++; if(c.t===T.FIRESTA)fire++; }
+    if(isZone(c.t)) zones++;
+    if(c.ax===x&&c.ay===y){
+      if(c.t===T.POLICE)police++; if(c.t===T.FIRESTA)fire++;
+      if(c.t===T.COAL)plantCost+=60; if(c.t===T.NUKE)plantCost+=110;
+    }
   }
-  const expense = (roads*0.18+rails*0.5)*city.fundRoad + police*24*city.fundPolice + fire*24*city.fundFire;
+  // 交通維護受撥款比例影響;分區公共服務與電廠營運為固定支出
+  const expense = (roads*0.6+rails*1.5)*city.fundRoad + police*40*city.fundPolice + fire*40*city.fundFire
+                + zones*0.3 + plantCost;
   city.funds += Math.round(income - expense);
   city.lastIncome = Math.round(income); city.lastExpense = Math.round(expense);
   city.roadCount=roads; city.railCount=rails; city.policeCount=police; city.fireCount=fire;
@@ -554,6 +582,19 @@ function igniteCell(x,y){
   } else { c.t=T.FIRE; c.fire=0; c.lvl=0; c.ax=-1; c.ay=-1; }
 }
 
+/* 災難摧毀格:大建築整棟夷平(避免殘骸仍保有功能或錨點遺失),橋梁還原成水 */
+function wreckCell(x,y){
+  const c=G[x][y];
+  const rub = cc=>{ cc.t=cc.br?T.WATER:T.RUBBLE; cc.br=false; cc.wr=false; cc.rl=false; cc.lvl=0; cc.fire=0; cc.ax=-1; cc.ay=-1; };
+  if(isBigB(c.t) && c.ax>=0){
+    const t0=c.t, ax=c.ax, ay=c.ay, w=BSPEC[t0].w;
+    for(let i=0;i<w;i++)for(let j=0;j<w;j++){
+      if(inB(ax+i,ay+j) && G[ax+i][ay+j].t===t0) rub(G[ax+i][ay+j]);
+    }
+  }
+  rub(c);
+}
+
 function checkMilestones(blackout){
   const M=city.milestones;
   const marks=[[500,'村莊'],[2000,'城鎮'],[10000,'城市'],[30000,'都會'],[60000,'大都會']];
@@ -588,7 +629,7 @@ function triggerDisaster(kind, auto){
     while(n-->0){
       const [x,y]=cand[Math.floor(Math.random()*cand.length)];
       if(fx<0){ fx=x; fy=y; }
-      const c=G[x][y]; c.t=c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.rl=false; c.lvl=0; c.ax=-1; c.ay=-1;
+      wreckCell(x,y);
     }
     if(fx>=0) disasterAlert('🌊 洪水氾濫!沿岸地區受災。',fx,fy);
     else disasterAlert('🌊 洪水氾濫!沿岸地區受災。');
@@ -604,7 +645,7 @@ function triggerDisaster(kind, auto){
       const [x,y]=randTile(); const c=G[x][y];
       if(c.t===T.WATER||c.t===T.GRASS) continue;
       if(Math.random()<0.25 && flammable(c.t)) igniteCell(x,y);
-      else { if(isBigB(c.t)){c.ax=-1;c.ay=-1;} c.t=c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.rl=false; c.lvl=0; }
+      else wreckCell(x,y);
     }
     quake=1.4;
     disasterAlert('🫨 大地震!全市受創。');   // 全市範圍,鏡頭不跳轉
@@ -633,6 +674,7 @@ function triggerDisaster(kind, auto){
 
 /* 災難實體逐步推進(由主迴圈以 0.22s 間隔呼叫) */
 function stepEntities(){
+  let hit=false;
   if(tornadoE){
     const e=tornadoE;
     e.vx += (Math.random()-0.5)*0.6; e.vz += (Math.random()-0.5)*0.6;
@@ -640,10 +682,7 @@ function stepEntities(){
     e.x=clamp(e.x+e.vx,1,N-2); e.z=clamp(e.z+e.vz,1,N-2);
     const tx=Math.round(e.x), tz=Math.round(e.z);
     const c=G[tx][tz];
-    if(c.t!==T.WATER && c.t!==T.GRASS){
-      if(isBigB(c.t)){c.ax=-1;c.ay=-1;}
-      c.t = c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.rl=false; c.lvl=0; dirty=true;
-    }
+    if(c.t!==T.WATER && c.t!==T.GRASS){ wreckCell(tx,tz); hit=true; }
     if(--e.life<=0){ tornadoE=null; toast('龍捲風消散了。'); }
   }
   if(monsterE){
@@ -656,13 +695,13 @@ function stepEntities(){
       if(!inB(cx,cy)) continue;
       const c=G[cx][cy];
       if(c.t!==T.WATER && c.t!==T.GRASS){
-        if(isBigB(c.t)){c.ax=-1;c.ay=-1;}
         if(Math.random()<0.3 && flammable(c.t)) igniteCell(cx,cy);
-        else {c.t=c.br?T.WATER:T.RUBBLE; c.br=false; c.wr=false; c.rl=false; c.lvl=0;}
-        dirty=true;
+        else wreckCell(cx,cy);
+        hit=true;
       }
     }
     if(Math.abs(e.x-e.tx)<1 && Math.abs(e.z-e.tz)<1){ e.tx=Math.random()*N; e.tz=Math.random()*N; }
     if(--e.life<=0){ monsterE=null; toast('巨獸返回水域深處……'); }
   }
+  if(hit){ computePower(); dirty=true; }   // 破壞後即時重算電網(坑 5)
 }
