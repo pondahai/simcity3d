@@ -436,6 +436,7 @@ function loadCity(s){
 }
 
 /* ── 每月模擬節拍 ── */
+const CHURN=0.02;              // 每月成熟分區自然流失機率
 const JAM_LO=120, JAM_HI=180;   // 道路交通量壅塞門檻(輕度/嚴重)
 function simMonth(){
   const blackout = computePower();
@@ -466,9 +467,14 @@ function simMonth(){
     if(c.pow && acc[i] && dem>0 && c.lvl<5){
       const p = 0.03 + dem*0.16 + (city.landv[i]>34?0.04:0) - envBad;
       if(Math.random()<p){ c.lvl++; c.tier=landTier(i,c.t); }
-    } else if(!c.pow || dem<-0.25 || envBad>0.4){
-      if(c.lvl>0 && Math.random() < (!c.pow?0.35:0.12)){ c.lvl--; c.tier=landTier(i,c.t); }
+    } else if(c.lvl>0){
+      // 衰退:停電最快;需求轉負、環境差、嚴重壅塞依程度提高機率
+      const pd = !c.pow ? 0.35
+        : Math.max(0,-dem)*0.25 + (envBad>0.4?0.12:0) + (jam>JAM_HI?0.05:0);
+      if(Math.random()<pd){ c.lvl--; c.tier=landTier(i,c.t); }
     }
+    // 自然流動:居民搬遷、商家歇業,讓成熟城市也有起伏(需求>0 時會再長回來)
+    if(c.lvl>0 && Math.random()<CHURN){ c.lvl--; c.tier=landTier(i,c.t); }
     if(c.t===T.RES) resSum+=c.lvl; else if(c.t===T.COM) comSum+=c.lvl; else indSum+=c.lvl;
   }
   city.resSum=resSum; city.comSum=comSum; city.indSum=indSum;
