@@ -214,7 +214,7 @@ const T = {GRASS:0, WATER:1, TREE:2, ROAD:3, RAIL:4, WIRE:5,
 /* 建築規格:尺寸、電力容量(可供電格數)、名稱 */
 const BSPEC = {
   [T.POLICE]:{w:2,name:'警察局'}, [T.FIRESTA]:{w:2,name:'消防局'},
-  [T.COAL]:{w:3,name:'火力發電廠',cap:220}, [T.NUKE]:{w:3,name:'核能發電廠',cap:550},
+  [T.COAL]:{w:3,name:'火力發電廠',cap:480}, [T.NUKE]:{w:3,name:'核能發電廠',cap:1200},
   [T.STADIUM]:{w:4,name:'體育場'}, [T.PORT]:{w:3,name:'海港'}, [T.AIRPORT]:{w:5,name:'機場'},
 };
 const TNAME = {0:'草地',1:'水域',2:'樹林',3:'道路',4:'鐵路',5:'電線',6:'住宅區',7:'商業區',
@@ -463,7 +463,8 @@ function computePower(){
       for(const [cx,cy] of comp){
         const cc=G[cx][cy];
         if(cc.t===T.WIRE || cc.wr || cc.t===T.COAL || cc.t===T.NUKE){ cc.pow=true; continue; }   // 電廠自身不吃容量
-        if(used<cap){ cc.pow=true; used++; } else blackout=true;
+        const need = isZone(cc.t) ? 1+cc.lvl*0.5 : 1;   // 用電隨分區等級增加
+        if(used+need<=cap){ cc.pow=true; used+=need; } else blackout=true;
       }
     }
   }
@@ -558,8 +559,8 @@ function computeStats(){
     const c=G[x][y];
     if(c.ax===x&&c.ay===y&&(c.t===T.POLICE||c.t===T.FIRESTA)){
       if(!(c.pow||G[x+1]?.[y]?.pow||G[x]?.[y+1]?.pow||G[x+1]?.[y+1]?.pow)) continue;
-      if(c.t===T.POLICE) radial(pc,x+1,y+1,Math.round(13*city.fundPolice)+1,100);
-      if(c.t===T.FIRESTA) radial(fc,x+1,y+1,Math.round(13*city.fundFire)+1,100);
+      if(c.t===T.POLICE) radial(pc,x+1,y+1,Math.round(13*effFund(city.fundPolice))+1,100);
+      if(c.t===T.FIRESTA) radial(fc,x+1,y+1,Math.round(13*effFund(city.fundFire))+1,100);
     }
   }
 
@@ -584,7 +585,7 @@ function computeStats(){
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
     const c=G[x][y], i=idx(x,y);
     let cr=0;
-    if(isZone(c.t)) cr = c.lvl*14 - lv[i]*0.35 - pc[i]*0.6;
+    if(isZone(c.t)) cr = c.lvl*14 - lv[i]*0.35 - pc[i]*0.6 + (c.t===T.RES ? (city.unemp||0)*25 : 0);   // 失業推高住宅區犯罪
     cri[i]=Math.max(0,cr);
   }
   blur(cri,2);
@@ -659,7 +660,7 @@ function simMonth(){
   }
 
   // 分區生長/衰退
-  let resSum=0, comSum=0, indSum=0;
+  let resSum=0, comSum=0, indSum=0, popSum=0, resTax=0;
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
     const c=G[x][y], i=idx(x,y);
     if(!isZone(c.t)) continue;
@@ -678,10 +679,10 @@ function simMonth(){
     }
     // 自然流動:居民搬遷、商家歇業,讓成熟城市也有起伏(需求>0 時會再長回來)
     if(c.lvl>0 && Math.random()<CHURN){ c.lvl--; c.tier=landTier(i,c.t); }
-    if(c.t===T.RES) resSum+=c.lvl; else if(c.t===T.COM) comSum+=c.lvl; else indSum+=c.lvl;
+    if(c.t===T.RES){ resSum+=c.lvl; popSum+=c.lvl*(16+c.tier*12); resTax+=c.lvl*(0.6+city.landv[i]/50); } else if(c.t===T.COM) comSum+=c.lvl; else indSum+=c.lvl;
   }
   city.resSum=resSum; city.comSum=comSum; city.indSum=indSum;
-  city.pop = resSum*22;
+  city.pop = popSum;   // 密度依價位檔:低價 16、中價 28、高價 40 人/級
 
   // 對外市場緩慢成長,海港/機場加速
   let boost=1;
@@ -693,13 +694,14 @@ function simMonth(){
 
   // RCI 需求
   const jobs = comSum+indSum;
+  city.unemp = resSum>0 ? clamp(1 - (jobs+14)*1.35/resSum, 0, 1) : 0;   // 住宅相對工作過剩的比例
   const taxPen = (city.tax-7)*0.09;   // 高稅率明顯壓抑需求,形成取捨
   let stadiumBonus = 0;
   for(let x=0;x<N;x++)for(let y=0;y<N;y++)
     if(G[x][y].t===T.STADIUM&&G[x][y].ax===x&&G[x][y].ay===y) stadiumBonus=0.12;
-  city.demR = clamp(((jobs+14)*1.35 - resSum)/55 - taxPen + stadiumBonus, -1, 1);
+  city.demR = clamp(((jobs+14)*1.35 - resSum)/55 - taxPen*0.7 + stadiumBonus, -1, 1);
   city.demC = clamp((resSum*0.62 - comSum)/45 - taxPen, -1, 1);
-  city.demI = clamp((city.ext + resSum*0.42 - indSum)/50 - taxPen*1.2, -1, 1);
+  city.demI = clamp((city.ext + resSum*0.42 - indSum)/50 - taxPen*1.4, -1, 1);
 
   // 火災蔓延與燒毀
   const burning=[];
@@ -721,8 +723,8 @@ function simMonth(){
   if(burning.length) dirty=true;
 
   // 交通撥款不足:道路/鐵路逐月劣化
-  if(city.fundRoad<1){
-    const p=(1-city.fundRoad)*0.012;
+  if(effFund(city.fundRoad)<1){
+    const p=(1-effFund(city.fundRoad))*0.012;
     let decayed=0;
     for(let x=0;x<N;x++)for(let y=0;y<N;y++){
       const c=G[x][y];
@@ -736,7 +738,7 @@ function simMonth(){
   }
 
   // 財政(逐月)
-  const income = (resSum*1.0 + comSum*1.6 + indSum*1.6) * city.tax * 0.1;
+  const income = (resTax + comSum*1.6 + indSum*1.6) * city.tax * 0.1;
   let roads=0, rails=0, police=0, fire=0, zones=0, plantCost=0;
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
     const c=G[x][y];
@@ -751,6 +753,8 @@ function simMonth(){
   const expense = (roads*0.6+rails*1.5)*city.fundRoad + police*40*city.fundPolice + fire*40*city.fundFire
                 + zones*0.3 + plantCost;
   city.funds += Math.round(income - expense);
+  city.debtMonths = city.funds<0 ? (city.debtMonths||0)+1 : 0;
+  if(city.debtMonths===12) toast('💸 市庫連續一年赤字!低於 -$5,000 時警消與道路撥款將被迫減半。');
   city.lastIncome = Math.round(income); city.lastExpense = Math.round(expense);
   city.roadCount=roads; city.railCount=rails; city.policeCount=police; city.fireCount=fire;
 
@@ -774,6 +778,9 @@ function simMonth(){
   dirty=true;
   updateHUD();
 }
+
+/* 長期赤字(低於 -5000)時市政服務被迫減半 */
+const effFund = f => (city.funds < -5000 ? Math.min(f,0.5) : f);
 
 function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
 
@@ -838,6 +845,7 @@ function triggerDisaster(kind, auto){
     while(n-->0){
       const [x,y]=cand[Math.floor(Math.random()*cand.length)];
       if(fx<0){ fx=x; fy=y; }
+      if(G[x][y].t===T.GRASS||G[x][y].t===T.TREE) continue;   // 空地淹水退去後仍是空地
       wreckCell(x,y);
     }
     if(fx>=0) disasterAlert('🌊 洪水氾濫!沿岸地區受災。',fx,fy);
