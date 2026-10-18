@@ -1,13 +1,52 @@
 /* ═══════════ UI、音效與主迴圈 ═══════════ */
 const $ = s=>document.querySelector(s);
 
+/* 工具基本資料(懸停提示):[規格列..., 說明] */
+const TOOL_INFO={
+  query:   [[],'點擊地格查看電力、地價、污染、犯罪與交通。'],
+  doze:    [[['費用','$1/格']],'拆除地物;大建築整棟拆除。'],
+  autodoze:[[['費用','$1/格']],'開啟時施工自動清除樹林、瓦礫與腳下電線。'],
+  road:    [[['維護','$0.6/格・月']],'分區須在道路 3 格內才會生長;可跨河造橋(5 倍造價)。'],
+  rail:    [[['維護','$1.5/格・月']],'需搭配火車站才有作用;可與道路形成平交道、跨河造橋。'],
+  wire:    [[],'傳導電力;可跨越道路與鐵路。'],
+  station: [[['尺寸','2×2'],['維護','$15/月']],'須緊鄰鐵路並供電;同一鐵路網 ≥2 站才營運,周圍約 6 格車流減半。'],
+  res:     [[['維護','$0.3/格・月'],['用電','1+等級×0.5']],'需供電、道路與住宅需求;人口依等級與地價。'],
+  com:     [[['維護','$0.3/格・月'],['用電','1+等級×0.5']],'提供就業;需求來自住宅人口。'],
+  ind:     [[['維護','$0.3/格・月'],['用電','1+等級×0.5']],'提供就業但產生污染;需求來自對外市場。'],
+  park:    [[],'提升周圍 5 格地價。'],
+  police:  [[['尺寸','2×2'],['維護','$40/月']],'需供電;依撥款降低周圍犯罪。'],
+  firesta: [[['尺寸','2×2'],['維護','$40/月']],'需供電;依撥款加快滅火、減緩火勢蔓延。'],
+  stadium: [[['尺寸','4×4']],'提高住宅需求與周圍地價。'],
+  coal:    [[['尺寸','3×3'],['容量','480'],['維護','$60/月']],'便宜但污染嚴重。'],
+  nuke:    [[['尺寸','3×3'],['容量','1200'],['維護','$110/月']],'容量大、無污染。'],
+  port:    [[['尺寸','3×3']],'須緊鄰水域;加快對外市場成長,提高工業需求。'],
+  airport: [[['尺寸','5×5']],'大幅加快對外市場成長,但有污染。'],
+};
+function showTip(tl, el){
+  const tip=$('#tip'), info=TOOL_INFO[tl.id]; if(!tip||!info) return;
+  const rows=[];
+  if(tl.pr && !tl.tg) rows.push(['造價', '$'+tl.pr+(isBigB(tl.t)?'':(tl.id==='doze'?'':'/格'))]);
+  rows.push(...info[0]);
+  tip.innerHTML=`<div class="tt">${tl.ic} ${tl.nm}</div>`+
+    rows.map(([k,v])=>`<span class="k">${k}</span> ${v}`).join('<br>')+
+    `<div class="note">${info[1]}</div>`;
+  tip.style.display='block';
+  const r=el.getBoundingClientRect();
+  tip.style.left=(r.right+8)+'px';
+  tip.style.top=Math.max(8,Math.min(innerHeight-tip.offsetHeight-8, r.top))+'px';
+}
+function hideTip(){ const t=$('#tip'); if(t) t.style.display='none'; }
+
 /* 工具列 */
 function buildToolbar(){
+  if(!$('#tip')){ const d=document.createElement('div'); d.id='tip'; document.body.appendChild(d); }
   const bar=$('#toolbar');
   bar.innerHTML='';
   for(const tl of TOOLS){
     if(tl.grp){ const d=document.createElement('div'); d.className='toolgroup'; d.textContent=tl.grp; bar.appendChild(d); continue; }
     const b=document.createElement('button');
+    b.addEventListener('pointerenter', e=>{ if(e.pointerType==='mouse') showTip(tl,b); });
+    b.addEventListener('pointerleave', hideTip);
     if(tl.tg){   // 開關型(自動推土機):切換狀態,不改變目前工具
       b.className='tool'+(city.autoDoze?' sel':'');
       b.dataset.tg='1';
