@@ -336,10 +336,11 @@ function computeStats(){
   }
   blur(pol,3);
 
-  // 警消覆蓋(依撥款比例縮放)
+  // 警消覆蓋(依撥款比例縮放;需供電,2×2 任一格有電即算)
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
     const c=G[x][y];
-    if(c.ax===x&&c.ay===y){
+    if(c.ax===x&&c.ay===y&&(c.t===T.POLICE||c.t===T.FIRESTA)){
+      if(!(c.pow||G[x+1]?.[y]?.pow||G[x]?.[y+1]?.pow||G[x+1]?.[y+1]?.pow)) continue;
       if(c.t===T.POLICE) radial(pc,x+1,y+1,Math.round(13*city.fundPolice)+1,100);
       if(c.t===T.FIRESTA) radial(fc,x+1,y+1,Math.round(13*city.fundFire)+1,100);
     }
