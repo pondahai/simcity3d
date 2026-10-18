@@ -193,7 +193,7 @@ function rebuildGround(){
       if(overlay==='pollution') col=heat(city.pollution[i],90);
       if(overlay==='crime') col=heat(city.crime[i],80);
       if(overlay==='landv'){ const t=clamp(city.landv[i]/60,0,1); _c.setHSL(0.6,0.6,0.18+t*0.45); col=_c.getHex(); }
-      if(overlay==='traffic') col=heat(city.traffic[i],60);
+      if(overlay==='traffic') col = c.t===T.STATION ? stnCol(c) : heat(city.traffic[i],60);
     }
     _d.position.set(wx(x), yo, wz(y)); _d.scale.set(TILE,h,TILE); _d.rotation.set(0,0,0);
     _d.updateMatrix();
@@ -207,8 +207,14 @@ function rebuildGround(){
 const RESWALL=[0xf2e7d5,0xe8d9c3,0xf5efe0,0xdcd0bb];
 const ROOFCOL=[0xc0574a,0x7d6b5d,0x5f7d8c,0xa8703f];
 
+/* 交通圖層的車站顏色:營運中亮青、未營運紫 */
+const STN_ON=0x22e5ff, STN_OFF=0xa47be0;
+let opStations=new Set();   // 營運中車站錨點 idx
+const stnCol=c=>opStations.has(idx(c.ax,c.ay))?STN_ON:STN_OFF;
+
 function rebuildCity(){
   boxN=0; coneN=0; cylN=0; warnN=0;
+  opStations=new Set(computeStations().filter(s=>s.n>=2).map(s=>idx(s.x,s.y)));
   const seasonNoOverlay = overlay==='none';
   // 圖層檢視:建築壓扁成半格高色塊(道路/鐵路/電線照畫,供對照電網)
   const flat = overlay!=='none' && !ovShowBldg;
@@ -255,7 +261,8 @@ function rebuildCity(){
     if(isBigB(c.t) && c.ax===x && c.ay===y){
       if(flat){
         const w=BSPEC[c.t].w, cx=X+(w-1)*TILE/2, cz=Z+(w-1)*TILE/2;
-        pBox(cx,0.31,cz,w*TILE*0.92,0.5,w*TILE*0.92,0x9aa2ac,0);
+        const fc = (overlay==='traffic'&&c.t===T.STATION) ? stnCol(c) : 0x9aa2ac;
+        pBox(cx,0.31,cz,w*TILE*0.92,overlay==='traffic'&&c.t===T.STATION?1.6:0.5,w*TILE*0.92,fc,0);
       } else drawBig(c,x,y);
     }
     // 停電閃爍標記(無覆蓋圖時)

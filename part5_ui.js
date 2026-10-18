@@ -154,7 +154,7 @@ function setOverlay(k){
     if(overlay==='none'){ lg.style.display='none'; }
     else {
       const name=OVERLAYS.find(o=>o[0]===overlay)[1];
-      lg.innerHTML=`<b>${name}</b><br>${overlay==='power'?'綠=供電 紅=停電':overlay==='landv'?'亮藍=高價值':'綠=低 紅=高'}
+      lg.innerHTML=`<b>${name}</b><br>${overlay==='power'?'綠=供電 紅=停電':overlay==='landv'?'亮藍=高價值':overlay==='traffic'?'綠=低 紅=高<br><span style="color:#22e5ff">■</span> 營運車站 <span style="color:#a47be0">■</span> 未營運車站':'綠=低 紅=高'}
         <label style="display:flex;align-items:center;gap:6px;margin-top:7px;cursor:pointer;color:var(--dim)">
         <input type="checkbox" id="bldgChk" ${ovShowBldg?'checked':''}> 顯示立體建築</label>`;
       lg.style.display='block';
