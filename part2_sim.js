@@ -6,17 +6,17 @@ const N = 64, TILE = 4, HALF = N*TILE/2;
 const T = {GRASS:0, WATER:1, TREE:2, ROAD:3, RAIL:4, WIRE:5,
            RES:6, COM:7, IND:8, PARK:9,
            POLICE:10, FIRESTA:11, COAL:12, NUKE:13, STADIUM:14, PORT:15, AIRPORT:16,
-           RUBBLE:17, FIRE:18};
+           RUBBLE:17, FIRE:18, STATION:19};
 
 /* 建築規格:尺寸、電力容量(可供電格數)、名稱 */
 const BSPEC = {
   [T.POLICE]:{w:2,name:'警察局'}, [T.FIRESTA]:{w:2,name:'消防局'},
   [T.COAL]:{w:3,name:'火力發電廠',cap:480}, [T.NUKE]:{w:3,name:'核能發電廠',cap:1200},
-  [T.STADIUM]:{w:4,name:'體育場'}, [T.PORT]:{w:3,name:'海港'}, [T.AIRPORT]:{w:5,name:'機場'},
+  [T.STADIUM]:{w:4,name:'體育場'}, [T.PORT]:{w:3,name:'海港'}, [T.AIRPORT]:{w:5,name:'機場'}, [T.STATION]:{w:2,name:'火車站'},
 };
 const TNAME = {0:'草地',1:'水域',2:'樹林',3:'道路',4:'鐵路',5:'電線',6:'住宅區',7:'商業區',
   8:'工業區',9:'公園',10:'警察局',11:'消防局',12:'火力發電廠',13:'核能發電廠',
-  14:'體育場',15:'海港',16:'機場',17:'瓦礫',18:'火災!'};
+  14:'體育場',15:'海港',16:'機場',17:'瓦礫',18:'火災!',19:'火車站'};
 
 /* 工具定義 */
 const TOOLS = [
@@ -27,6 +27,7 @@ const TOOLS = [
   {id:'road',  ic:'🛣️', nm:'道路',   pr:10,  t:T.ROAD},
   {id:'rail',  ic:'🛤️', nm:'鐵路',   pr:20,  t:T.RAIL},
   {id:'wire',  ic:'⚡', nm:'電線',   pr:5,   t:T.WIRE},
+  {id:'station',ic:'🚉',nm:'火車站', pr:500, t:T.STATION},
   {grp:'分區'},
   {id:'res',   ic:'🏠', nm:'住宅區', pr:100, t:T.RES},
   {id:'com',   ic:'🏬', nm:'商業區', pr:100, t:T.COM},
@@ -176,6 +177,7 @@ function place(tool, x, y){
     }
     if(!nearWater){ toast('海港必須緊鄰水域。'); return false; }
   }
+  if(t===T.STATION && !stationTouchesRail(x,y)){ toast('火車站必須緊鄰鐵路。'); return false; }
   const cost = (onWater ? tl.pr*5 : tl.pr) + clear;
   if(city.funds < cost){ toast(onWater?'橋梁造價為 5 倍,資金不足!':'資金不足!'); sfx('deny'); return false; }
   city.funds -= cost;
@@ -277,12 +279,56 @@ function computePower(){
   return blackout;
 }
 
-/* ── 道路可達性:距道路/鐵路 3 格內 ── */
+/* ── 鐵路車站網 ── */
+const railCell = c => c.t===T.RAIL || c.rl;
+function stationTouchesRail(x,y){
+  for(let i=-1;i<=2;i++)for(let j=-1;j<=2;j++){
+    if((i===-1||i===2||j===-1||j===2) && inB(x+i,y+j) && railCell(G[x+i][y+j])) return true;
+  }
+  return false;
+}
+/* 從每座供電車站經鐵路 BFS,同一鐵路網上有 ≥2 座供電站才營運;回傳 [{x,y,net}] 並記錄 c.stn(網內站數) */
+function computeStations(){
+  const st=[];
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++){
+    const c=G[x][y]; if(c.t===T.STATION&&c.ax===x&&c.ay===y) st.push({x,y,net:-1});
+  }
+  const lab=new Int32Array(N*N).fill(-1); let nid=0;
+  const sizes=[];
+  for(const s of st){
+    // 車站四周的鐵路作為起點
+    let seed=null;
+    for(let i=-1;i<=2&&!seed;i++)for(let j=-1;j<=2;j++){
+      const nx=s.x+i, ny=s.y+j;
+      if((i===-1||i===2||j===-1||j===2)&&inB(nx,ny)&&railCell(G[nx][ny])){ seed=[nx,ny]; break; }
+    }
+    // 需供電(2×2 任一格有電)才營運,與警消局一致
+    s.pow = G[s.x][s.y].pow||G[s.x+1][s.y].pow||G[s.x][s.y+1].pow||G[s.x+1][s.y+1].pow;
+    if(!seed||!s.pow) continue;
+    if(lab[idx(...seed)]<0){
+      const q=[seed]; lab[idx(...seed)]=nid;
+      while(q.length){
+        const [cx,cy]=q.pop();
+        for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+          const nx=cx+dx, ny=cy+dy;
+          if(inB(nx,ny)&&lab[idx(nx,ny)]<0&&railCell(G[nx][ny])){ lab[idx(nx,ny)]=nid; q.push([nx,ny]); }
+        }
+      }
+      sizes[nid++]=0;
+    }
+    s.net=lab[idx(...seed)]; sizes[s.net]++;
+  }
+  for(const s of st) s.n = s.net>=0 ? sizes[s.net] : 0;
+  city.stationsActive = st.filter(s=>s.n>=2).length;
+  return st;
+}
+
+/* ── 道路可達性:距道路 3 格內(鐵路需經車站才有效,見 computeStats) ── */
 function computeAccess(){
   const acc = new Uint8Array(N*N);
   const q=[];
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
-    if(G[x][y].t===T.ROAD||G[x][y].t===T.RAIL){ acc[idx(x,y)]=1; q.push([x,y,0]); }
+    if(G[x][y].t===T.ROAD){ acc[idx(x,y)]=1; q.push([x,y,0]); }
   }
   let head=0;
   while(head<q.length){
@@ -333,6 +379,10 @@ function computeStats(){
     const t=G[x][y].t; if(t===T.ROAD||t===T.RAIL) radial(rd,x,y,4,1);
   }
   for(let i=0;i<N*N;i++) tra[i]*=4/Math.max(2,rd[i]);
+  // 營運中車站:半徑 6 格內車流最多減半(通勤改搭火車)
+  const rel=new Float32Array(N*N);
+  for(const s of computeStations()) if(s.n>=2) radial(rel,s.x+1,s.y+1,7,1.4);
+  for(let i=0;i<N*N;i++) tra[i]*=1-0.5*Math.min(1,rel[i]);
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
     const t=G[x][y].t, i=idx(x,y);
     if(t===T.RAIL) tra[i]*=0.3;       // 鐵路運量大,壅塞僅為道路的 30%
@@ -543,7 +593,7 @@ function simMonth(){
     if(isZone(c.t)) zones++;
     if(c.ax===x&&c.ay===y){
       if(c.t===T.POLICE)police++; if(c.t===T.FIRESTA)fire++;
-      if(c.t===T.COAL)plantCost+=60; if(c.t===T.NUKE)plantCost+=110;
+      if(c.t===T.COAL)plantCost+=60; if(c.t===T.STATION)plantCost+=15; if(c.t===T.NUKE)plantCost+=110;
     }
   }
   // 交通維護受撥款比例影響;分區公共服務與電廠營運為固定支出

@@ -83,6 +83,10 @@ function showQuery(x,y,px,py){
   const rows=[];
   rows.push(`<div class="qt">${TNAME[c.t]}${c.rl?'+鐵路(平交道)':''}${c.wr?'+電線':''}${isZone(c.t)?` Lv.${c.lvl}`:''}</div>`);
   rows.push(`<span class="dim">座標</span> (${x}, ${y})`);
+  if(c.t===T.STATION){
+    const s=computeStations().find(o=>o.x===c.ax&&o.y===c.ay);
+    rows.push(`<span class="dim">鐵路網</span> ${!s||!s.pow?'❌ 未供電,停駛':s.n>=2?`✅ 連通 ${s.n} 站,營運中`:'❌ 需以鐵路連接另一座供電車站'}`);
+  }
   if(isZone(c.t)||isBigB(c.t)||c.t===T.WIRE||c.wr)
     rows.push(`<span class="dim">電力</span> ${c.pow?'✅ 供電中':'❌ 未供電'}`);
   rows.push(`<span class="dim">地價</span> ${Math.round(city.landv[i])}`);

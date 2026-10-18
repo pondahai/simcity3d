@@ -502,6 +502,13 @@ function drawBig(c,x,y){
       pBox(cx,3.4,cz,W*0.74,0.4,W*0.66,0x33465f,0);
       pBox(cx,3.9,cz,1.2,0.7,0.5,0x2e77d0,0); pBox(cx,4.5,cz,0.16,0.6,0.16,0x33465f,0);
       break;
+    case T.STATION:   // 月台 + 雨棚 + 站房
+      pBox(cx,0.5,cz,W*0.9,0.5,W*0.5,0x8d939c,0);
+      for(const s of [-1,1]) pBox(cx+s*W*0.35,1.6,cz,0.18,2.0,0.18,0x4a4f57,0);
+      pBox(cx,2.7,cz,W*0.92,0.22,W*0.56,0x2f6b5e,0);
+      pBox(cx,1.3,cz+W*0.32,W*0.5,2.0,W*0.22,0xd8c7a5,0);
+      pBox(cx,2.5,cz+W*0.32,W*0.56,0.3,W*0.28,0x7a3b2e,0);
+      break;
     case T.FIRESTA:
       pBox(cx,1.5,cz,W*0.72,3.0,W*0.64,0xc65a4d,0);
       pBox(cx,3.2,cz,W*0.76,0.4,W*0.68,0x6e2e28,0);
