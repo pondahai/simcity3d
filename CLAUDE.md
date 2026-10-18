@@ -29,7 +29,7 @@ python3 build.py   # 將 part1~part5 組裝成 立體模擬城市.html
 7. Windows 下組建要 `python -X utf8 build.py`(cp950 會炸)。
 
 ## 存檔系統
-localStorage key `simcity3d:save`,`SAVE_VER` 版本檢查。serializeCity() 存 city(排除 Float32Array 圖層)+ 4096 格 cell 精簡陣列(br/wr/rl 打包成 bitmask,第 8 欄為 tier);loadCity() 還原後以 computePower()+computeStats() 重建衍生狀態,舊檔(7 欄)載入後以地價補採樣 tier,SAVE_VER 不需升版。自動存檔時機:年度結算、pagehide、visibilitychange hidden、建新城市、匯入後。匯出/匯入 JSON 在新城市彈窗。
+localStorage key `simcity3d:save`,`SAVE_VER` 版本檢查。serializeCity() 存 city(排除 Float32Array 圖層)+ 4096 格 cell 精簡陣列(br/wr/rl 打包成 bitmask,第 8 欄為 tier);loadCity() 還原後以 computePower()+computeStats() 重建衍生狀態,舊檔(7 欄)載入後以地價補採樣 tier,SAVE_VER 不需升版。自動存檔時機:年度結算、pagehide、visibilitychange hidden、建新城市、匯入後。匯出/匯入 JSON 在新城市彈窗。歷史數據 city.hist(recordHistory() 每月一筆,保留 120 筆,欄位 [年,月,人口,資金,月結餘,R,C,I,平均污染,平均犯罪])隨 city 存檔;頂部「📈 統計」開 openHistory() Canvas 折線圖。
 
 ## 待辦 / 可改進
 - 尚未在真機完整驗證:街景碰撞手感、手機效能、音效觸發。

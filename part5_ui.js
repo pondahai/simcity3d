@@ -201,6 +201,60 @@ function setOverlay(k){
     }
 }
 
+/* 統計:歷史折線圖 */
+const CHARTS=[
+  {t:'人口', s:[[2,'#ffd489','人口']]},
+  {t:'資金', s:[[3,'#4cc36b','資金']], zero:true},
+  {t:'每月結餘', s:[[4,'#ffb742','月結餘']], zero:true},
+  {t:'RCI 需求', s:[[5,'#4cc36b','住宅'],[6,'#4d9de0','商業'],[7,'#e8c14a','工業']], zero:true, fix:[-1,1]},
+  {t:'環境(分區平均)', s:[[8,'#c98a5a','污染'],[9,'#e05d5d','犯罪']]},
+];
+let histSpan=120;
+function openHistory(){
+  const m=openModal(`<h2>城市統計</h2><div class="sub">每月記錄,最多保留 10 年</div>
+    <div class="choice" style="margin-bottom:12px">
+      <button data-sp="12" class="${histSpan===12?'on':''}">近 1 年</button>
+      <button data-sp="120" class="${histSpan===120?'on':''}">近 10 年</button>
+    </div>
+    <div id="charts"></div>`);
+  m.querySelectorAll('[data-sp]').forEach(b=>b.onclick=()=>{
+    histSpan=+b.dataset.sp;
+    m.querySelectorAll('[data-sp]').forEach(x=>x.classList.toggle('on',x===b));
+    drawCharts();
+  });
+  drawCharts();
+}
+function drawCharts(){
+  const box=$('#charts'); if(!box) return;
+  const H=(city.hist||[]).slice(-histSpan);
+  if(H.length<2){ box.innerHTML='<div style="color:var(--dim);font-size:13px">資料不足,讓時間再跑一兩個月吧。</div>'; return; }
+  const fmt=v=>Math.abs(v)>=1000?Math.round(v).toLocaleString():(+v.toFixed(2)).toString();
+  box.innerHTML=CHARTS.map((c,k)=>`<div class="chart"><div class="ch"><span>${c.t}</span><b>${
+      c.s.map(([j,,n])=>c.s.length>1?`${n} ${fmt(H[H.length-1][j])}`:fmt(H[H.length-1][j])).join('・')}</b></div>
+    <canvas id="cv${k}"></canvas>
+    ${c.s.length>1?`<div class="lg">${c.s.map(([,col,n])=>`<i style="background:${col}"></i>${n}`).join('')}</div>`:''}</div>`).join('');
+  const f=H[0], l=H[H.length-1];
+  CHARTS.forEach((c,k)=>{
+    const cv=$('#cv'+k), dpr=devicePixelRatio||1, W=cv.clientWidth, Ht=cv.clientHeight;
+    cv.width=W*dpr; cv.height=Ht*dpr;
+    const g=cv.getContext('2d'); g.scale(dpr,dpr);
+    let lo=Infinity, hi=-Infinity;
+    for(const r of H) for(const [j] of c.s){ lo=Math.min(lo,r[j]); hi=Math.max(hi,r[j]); }
+    if(c.fix){ lo=Math.min(lo,c.fix[0]); hi=Math.max(hi,c.fix[1]); }
+    if(c.zero){ lo=Math.min(lo,0); hi=Math.max(hi,0); }
+    if(hi-lo<1e-6){ hi+=1; lo-=1; }
+    const pad=6, X=i=>pad+(W-2*pad)*i/(H.length-1), Y=v=>Ht-pad-(Ht-2*pad)*(v-lo)/(hi-lo);
+    if(c.zero){ g.strokeStyle='rgba(127,147,168,.45)'; g.setLineDash([3,3]); g.beginPath(); g.moveTo(pad,Y(0)); g.lineTo(W-pad,Y(0)); g.stroke(); g.setLineDash([]); }
+    g.fillStyle='rgba(127,147,168,.8)'; g.font='10px sans-serif';
+    g.fillText(fmt(hi),pad+2,pad+9); g.fillText(fmt(lo),pad+2,Ht-pad-2);
+    for(const [j,col] of c.s){
+      g.strokeStyle=col; g.lineWidth=1.8; g.lineJoin='round'; g.beginPath();
+      H.forEach((r,i)=>i?g.lineTo(X(i),Y(r[j])):g.moveTo(X(i),Y(r[j]))); g.stroke();
+    }
+  });
+  box.insertAdjacentHTML('beforeend',`<div style="font-size:11px;color:var(--dim)">${f[0]} 年 ${f[1]+1} 月 → ${l[0]} 年 ${l[1]+1} 月</div>`);
+}
+
 /* 災難 */
 function openDisasters(){
   const m=openModal(`<h2>災難控制中心</h2><div class="sub">手動觸發,或切換隨機災難</div>
@@ -337,6 +391,7 @@ function bindUI(){
   $('#viewBtn').onclick=toggleView;
   $('#budgetBtn').onclick=openBudget;
   $('#mapBtn').onclick=openMaps;
+  $('#histBtn').onclick=openHistory;
   $('#disBtn').onclick=openDisasters;
   $('#newBtn').onclick=()=>openNewCity(false);
   $('#sndBtn').onclick=()=>{ muted=!muted; $('#sndBtn').textContent=muted?'🔇':'🔊'; audioKick(); };

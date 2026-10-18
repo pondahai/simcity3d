@@ -623,6 +623,7 @@ function simMonth(){
     toast(`${city.year} 年度結算:稅收 $${city.lastIncome*12|0},支出 $${city.lastExpense*12|0}(月均×12)`);
     saveCity();   // 年度自動存檔
   }
+  recordHistory();
   checkMilestones(blackout);
   dirty=true;
   updateHUD();
@@ -630,6 +631,21 @@ function simMonth(){
 
 /* 長期赤字(低於 -5000)時市政服務被迫減半 */
 const effFund = f => (city.funds < -5000 ? Math.min(f,0.5) : f);
+
+/* 歷史數據:每月一筆,保留 120 個月(隨 city 存檔)
+   欄位 [年,月,人口,資金,月結餘,R,C,I,平均污染,平均犯罪] */
+const HIST_MAX=120;
+function recordHistory(){
+  if(!Array.isArray(city.hist)) city.hist=[];
+  let pol=0, cri=0, n=0;
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++) if(isZone(G[x][y].t)){ const i=idx(x,y); pol+=city.pollution[i]; cri+=city.crime[i]; n++; }
+  const r2=v=>Math.round(v*100)/100;
+  city.hist.push([city.year, city.month, city.pop, city.funds, city.lastIncome-city.lastExpense,
+    r2(city.demR), r2(city.demC), r2(city.demI), n?Math.round(pol/n):0, n?Math.round(cri/n):0]);
+  if(city.hist.length>HIST_MAX) city.hist.splice(0, city.hist.length-HIST_MAX);
+  const mo=document.getElementById('modal');
+  if(mo && mo.classList.contains('show') && document.getElementById('charts')) drawCharts();   // 統計視窗開著時即時更新
+}
 
 function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
 

@@ -115,6 +115,12 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 .modal{position:fixed;inset:0;background:rgba(5,8,12,.62);z-index:40;display:none;
   align-items:center;justify-content:center;padding:16px}
 .modal.show{display:flex}
+.chart{margin-bottom:12px}
+.chart .ch{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;color:var(--dim);margin-bottom:3px}
+.chart .ch b{color:var(--ink);font-weight:600}
+.chart canvas{width:100%;height:96px;display:block;background:var(--panel2);border:1px solid var(--line);border-radius:6px}
+.chart .lg{font-size:11px;color:var(--dim);margin-top:2px}
+.chart .lg i{display:inline-block;width:10px;height:3px;vertical-align:middle;margin:0 4px 0 8px;border-radius:2px}
 .mbox{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px 24px;
   width:min(430px,94vw);max-height:88vh;overflow-y:auto;box-shadow:0 18px 60px rgba(0,0,0,.6)}
 .mbox h2{font-size:18px;color:var(--amber2);letter-spacing:4px;margin-bottom:4px}
@@ -172,6 +178,7 @@ input[type=range]{width:100%;accent-color:var(--amber)}
     <button class="mbtn" id="viewBtn">🚶 走進城市</button>
     <button class="mbtn" id="budgetBtn">📊 預算</button>
     <button class="mbtn" id="mapBtn">🗺 圖層</button>
+    <button class="mbtn" id="histBtn">📈 統計</button>
     <button class="mbtn" id="disBtn">⚠️ 災難</button>
     <button class="mbtn" id="sndBtn">🔊</button>
     <button class="mbtn" id="newBtn">🆕 新城市</button>
@@ -832,6 +839,7 @@ function simMonth(){
     toast(`${city.year} 年度結算:稅收 $${city.lastIncome*12|0},支出 $${city.lastExpense*12|0}(月均×12)`);
     saveCity();   // 年度自動存檔
   }
+  recordHistory();
   checkMilestones(blackout);
   dirty=true;
   updateHUD();
@@ -839,6 +847,21 @@ function simMonth(){
 
 /* 長期赤字(低於 -5000)時市政服務被迫減半 */
 const effFund = f => (city.funds < -5000 ? Math.min(f,0.5) : f);
+
+/* 歷史數據:每月一筆,保留 120 個月(隨 city 存檔)
+   欄位 [年,月,人口,資金,月結餘,R,C,I,平均污染,平均犯罪] */
+const HIST_MAX=120;
+function recordHistory(){
+  if(!Array.isArray(city.hist)) city.hist=[];
+  let pol=0, cri=0, n=0;
+  for(let x=0;x<N;x++)for(let y=0;y<N;y++) if(isZone(G[x][y].t)){ const i=idx(x,y); pol+=city.pollution[i]; cri+=city.crime[i]; n++; }
+  const r2=v=>Math.round(v*100)/100;
+  city.hist.push([city.year, city.month, city.pop, city.funds, city.lastIncome-city.lastExpense,
+    r2(city.demR), r2(city.demC), r2(city.demI), n?Math.round(pol/n):0, n?Math.round(cri/n):0]);
+  if(city.hist.length>HIST_MAX) city.hist.splice(0, city.hist.length-HIST_MAX);
+  const mo=document.getElementById('modal');
+  if(mo && mo.classList.contains('show') && document.getElementById('charts')) drawCharts();   // 統計視窗開著時即時更新
+}
 
 function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
 
@@ -2155,6 +2178,60 @@ function setOverlay(k){
     }
 }
 
+/* 統計:歷史折線圖 */
+const CHARTS=[
+  {t:'人口', s:[[2,'#ffd489','人口']]},
+  {t:'資金', s:[[3,'#4cc36b','資金']], zero:true},
+  {t:'每月結餘', s:[[4,'#ffb742','月結餘']], zero:true},
+  {t:'RCI 需求', s:[[5,'#4cc36b','住宅'],[6,'#4d9de0','商業'],[7,'#e8c14a','工業']], zero:true, fix:[-1,1]},
+  {t:'環境(分區平均)', s:[[8,'#c98a5a','污染'],[9,'#e05d5d','犯罪']]},
+];
+let histSpan=120;
+function openHistory(){
+  const m=openModal(`<h2>城市統計</h2><div class="sub">每月記錄,最多保留 10 年</div>
+    <div class="choice" style="margin-bottom:12px">
+      <button data-sp="12" class="${histSpan===12?'on':''}">近 1 年</button>
+      <button data-sp="120" class="${histSpan===120?'on':''}">近 10 年</button>
+    </div>
+    <div id="charts"></div>`);
+  m.querySelectorAll('[data-sp]').forEach(b=>b.onclick=()=>{
+    histSpan=+b.dataset.sp;
+    m.querySelectorAll('[data-sp]').forEach(x=>x.classList.toggle('on',x===b));
+    drawCharts();
+  });
+  drawCharts();
+}
+function drawCharts(){
+  const box=$('#charts'); if(!box) return;
+  const H=(city.hist||[]).slice(-histSpan);
+  if(H.length<2){ box.innerHTML='<div style="color:var(--dim);font-size:13px">資料不足,讓時間再跑一兩個月吧。</div>'; return; }
+  const fmt=v=>Math.abs(v)>=1000?Math.round(v).toLocaleString():(+v.toFixed(2)).toString();
+  box.innerHTML=CHARTS.map((c,k)=>`<div class="chart"><div class="ch"><span>${c.t}</span><b>${
+      c.s.map(([j,,n])=>c.s.length>1?`${n} ${fmt(H[H.length-1][j])}`:fmt(H[H.length-1][j])).join('・')}</b></div>
+    <canvas id="cv${k}"></canvas>
+    ${c.s.length>1?`<div class="lg">${c.s.map(([,col,n])=>`<i style="background:${col}"></i>${n}`).join('')}</div>`:''}</div>`).join('');
+  const f=H[0], l=H[H.length-1];
+  CHARTS.forEach((c,k)=>{
+    const cv=$('#cv'+k), dpr=devicePixelRatio||1, W=cv.clientWidth, Ht=cv.clientHeight;
+    cv.width=W*dpr; cv.height=Ht*dpr;
+    const g=cv.getContext('2d'); g.scale(dpr,dpr);
+    let lo=Infinity, hi=-Infinity;
+    for(const r of H) for(const [j] of c.s){ lo=Math.min(lo,r[j]); hi=Math.max(hi,r[j]); }
+    if(c.fix){ lo=Math.min(lo,c.fix[0]); hi=Math.max(hi,c.fix[1]); }
+    if(c.zero){ lo=Math.min(lo,0); hi=Math.max(hi,0); }
+    if(hi-lo<1e-6){ hi+=1; lo-=1; }
+    const pad=6, X=i=>pad+(W-2*pad)*i/(H.length-1), Y=v=>Ht-pad-(Ht-2*pad)*(v-lo)/(hi-lo);
+    if(c.zero){ g.strokeStyle='rgba(127,147,168,.45)'; g.setLineDash([3,3]); g.beginPath(); g.moveTo(pad,Y(0)); g.lineTo(W-pad,Y(0)); g.stroke(); g.setLineDash([]); }
+    g.fillStyle='rgba(127,147,168,.8)'; g.font='10px sans-serif';
+    g.fillText(fmt(hi),pad+2,pad+9); g.fillText(fmt(lo),pad+2,Ht-pad-2);
+    for(const [j,col] of c.s){
+      g.strokeStyle=col; g.lineWidth=1.8; g.lineJoin='round'; g.beginPath();
+      H.forEach((r,i)=>i?g.lineTo(X(i),Y(r[j])):g.moveTo(X(i),Y(r[j]))); g.stroke();
+    }
+  });
+  box.insertAdjacentHTML('beforeend',`<div style="font-size:11px;color:var(--dim)">${f[0]} 年 ${f[1]+1} 月 → ${l[0]} 年 ${l[1]+1} 月</div>`);
+}
+
 /* 災難 */
 function openDisasters(){
   const m=openModal(`<h2>災難控制中心</h2><div class="sub">手動觸發,或切換隨機災難</div>
@@ -2291,6 +2368,7 @@ function bindUI(){
   $('#viewBtn').onclick=toggleView;
   $('#budgetBtn').onclick=openBudget;
   $('#mapBtn').onclick=openMaps;
+  $('#histBtn').onclick=openHistory;
   $('#disBtn').onclick=openDisasters;
   $('#newBtn').onclick=()=>openNewCity(false);
   $('#sndBtn').onclick=()=>{ muted=!muted; $('#sndBtn').textContent=muted?'🔇':'🔊'; audioKick(); };
