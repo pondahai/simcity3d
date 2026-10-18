@@ -281,6 +281,7 @@ function computePower(){
 
 /* ── 鐵路車站網 ── */
 const railCell = c => c.t===T.RAIL || c.rl;
+let railNetLab=null, activeNets=new Set();   // 鐵路網編號(idx→網)與營運中的網
 function stationTouchesRail(x,y){
   for(let i=-1;i<=2;i++)for(let j=-1;j<=2;j++){
     if((i===-1||i===2||j===-1||j===2) && inB(x+i,y+j) && railCell(G[x+i][y+j])) return true;
@@ -320,6 +321,7 @@ function computeStations(){
   }
   for(const s of st) s.n = s.net>=0 ? sizes[s.net] : 0;
   city.stationsActive = st.filter(s=>s.n>=2).length;
+  railNetLab=lab; activeNets=new Set(st.filter(s=>s.n>=2).map(s=>s.net));   // 供火車動畫使用
   return st;
 }
 

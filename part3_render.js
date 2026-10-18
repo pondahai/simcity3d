@@ -558,19 +558,30 @@ function drawBig(c,x,y){
 }
 
 /* ── 車流與火車 ── */
-let cars=[], roadList=[], trains=[], railList=[];
+let cars=[], roadList=[], trains=[], railList=[], trainStop=null;
+const activeRail=(x,y)=>railAt(x,y) && railNetLab && activeNets.has(railNetLab[idx(x,y)]);
 function refreshCars(){
   roadList=[]; railList=[];
+  // 火車只跑營運中的鐵路網(同網 ≥2 座供電車站),並記錄各車站的停靠格
+  const st=computeStations();
+  trainStop=new Int16Array(N*N).fill(-1);
+  st.forEach((s,k)=>{ if(s.n<2) return;
+    for(let i=-1;i<=2;i++)for(let j=-1;j<=2;j++){
+      const nx=s.x+i, ny=s.y+j;
+      if((i===-1||i===2||j===-1||j===2)&&inB(nx,ny)&&railAt(nx,ny)) trainStop[idx(nx,ny)]=k;
+    }
+  });
   for(let x=0;x<N;x++)for(let y=0;y<N;y++){
     const c=G[x][y];
-    if(c.t===T.ROAD){ roadList.push([x,y]); if(c.rl) railList.push([x,y]); }
-    else if(c.t===T.RAIL) railList.push([x,y]);
+    if(c.t===T.ROAD) roadList.push([x,y]);
+    if(activeRail(x,y)) railList.push([x,y]);
   }
-  const wantTrain = Math.min(10, Math.floor(railList.length/7));
+  const wantTrain = Math.min(10, Math.ceil(railList.length/9));
+  trains=trains.filter(tr=>activeRail(tr.x,tr.y));   // 路網停運或被拆:撤掉該列車
   while(trains.length>wantTrain) trains.pop();
   while(trains.length<wantTrain && railList.length){
     const [x,y]=railList[Math.floor(Math.random()*railList.length)];
-    trains.push({x,y,tx:x,ty:y,prog:1});
+    trains.push({x,y,tx:x,ty:y,prog:1,wait:0,last:-1});
   }
   const want = Math.min(CAR_CAP - trains.length*2, Math.floor(roadList.length/2.4));
   while(cars.length>want) cars.pop();
@@ -607,17 +618,21 @@ function stepCars(dt){
   }
   // 火車:沿鐵路行駛,不走回頭路,端點折返
   for(const tr of trains){
-    tr.prog += dt*2.2;
+    if(tr.wait>0) tr.wait-=dt;   // 停站中
+    else tr.prog += dt*2.2;
     if(tr.prog>=1){
       const px=tr.x, py=tr.y;
       tr.x=tr.tx; tr.y=tr.ty; tr.prog=0;
+      // 抵達新車站的停靠格:停 1.8 秒(同站相鄰停靠格不重複停)
+      const sk=trainStop?trainStop[idx(tr.x,tr.y)]:-1;
+      if(sk>=0 && sk!==tr.last){ tr.last=sk; tr.wait=1.8; }   // 先選好下一格,停完再出發
       const opts=[];
       for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
         const nx=tr.x+dx, ny=tr.y+dy;
-        if(inB(nx,ny)&&railAt(nx,ny)&&!(nx===px&&ny===py)) opts.push([nx,ny]);
+        if(inB(nx,ny)&&activeRail(nx,ny)&&!(nx===px&&ny===py)) opts.push([nx,ny]);
       }
       if(!opts.length){
-        if(inB(px,py)&&railAt(px,py)&&!(px===tr.x&&py===tr.y)) opts.push([px,py]);
+        if(inB(px,py)&&activeRail(px,py)&&!(px===tr.x&&py===tr.y)) opts.push([px,py]);
         else { tr.prog=1; continue; }   // 鐵路被拆或孤立,原地待命
       }
       const pick=opts[Math.floor(Math.random()*opts.length)];
